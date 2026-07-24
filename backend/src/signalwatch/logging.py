@@ -1,0 +1,26 @@
+import json
+import logging
+from datetime import UTC, datetime
+from typing import Any
+
+
+class JsonFormatter(logging.Formatter):
+    def format(self, record: logging.LogRecord) -> str:
+        payload: dict[str, Any] = {
+            "timestamp": datetime.now(UTC).isoformat(),
+            "level": record.levelname,
+            "event": record.getMessage(),
+        }
+        for key in ("source_id", "duration_ms", "result_count", "new_count", "job_id"):
+            value = getattr(record, key, None)
+            if value is not None:
+                payload[key] = value
+        if record.exc_info:
+            payload["error_type"] = record.exc_info[0].__name__
+        return json.dumps(payload, separators=(",", ":"), ensure_ascii=False)
+
+
+def configure_logging(level: str = "INFO") -> None:
+    handler = logging.StreamHandler()
+    handler.setFormatter(JsonFormatter())
+    logging.basicConfig(level=level.upper(), handlers=[handler], force=True)
