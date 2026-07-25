@@ -3,7 +3,7 @@ from typing import Any
 
 from .models import FactualExtraction
 
-PROMPT_VERSION = "development-v2"
+PROMPT_VERSION = "development-v3"
 
 
 def factual_extraction_prompt(source_items: list[dict[str, Any]], readable_text: str) -> str:
@@ -16,7 +16,13 @@ def factual_extraction_prompt(source_items: list[dict[str, Any]], readable_text:
     return (
         "Extract factual information using only the supplied source. Return null for unknown "
         "organisation, product, or date. Return empty arrays when no supported claims or "
-        "limitations exist. Do not invent dates, entities, limitations, claims, or metrics. "
+        "limitations exist. Put directly observable source facts in confirmed_claims (for "
+        "example, a release exists, a repository added a documented feature, or a paper "
+        "introduces a stated method). Confirmed here means supported by this source, not "
+        "independently verified. Put performance, benchmark, capability, or outcome assertions "
+        "made by the source in reported_claims unless independent evidence is supplied. Exclude "
+        "opinions, promotional language, and unsupported inference from both lists. Do not invent "
+        "independent confirmation, dates, entities, limitations, claims, or metrics. "
         "Output only the schema-conforming object.\n\nSOURCE METADATA:\n"
         + json.dumps(metadata, ensure_ascii=False, separators=(",", ":"))
         + "\n\nTEMPORARY SOURCE TEXT:\n"

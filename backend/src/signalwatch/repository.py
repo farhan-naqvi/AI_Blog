@@ -42,7 +42,9 @@ class SupabaseRepository:
             raise RepositoryError(f"Supabase {response.status_code}: {response.text[:500]}")
         return response.json() if response.content else None
 
-    async def due_sources(self, connector_key: str | None = None) -> list[SourceRecord]:
+    async def due_sources(
+        self, connector_key: str | None = None, limit: int | None = None
+    ) -> list[SourceRecord]:
         params = {"select": "*", "active": "eq.true", "order": "last_checked_at.asc.nullsfirst"}
         if connector_key:
             params["connector_key"] = f"eq.{connector_key}"
@@ -53,7 +55,7 @@ class SupabaseRepository:
             last = datetime.fromisoformat(row["last_checked_at"].replace("Z", "+00:00")) if row.get("last_checked_at") else None
             if last is None or last + timedelta(minutes=row["poll_interval_minutes"]) <= now:
                 due.append(SourceRecord.model_validate(row))
-        return due
+        return due[:limit] if limit is not None else due
 
     async def smoke_source(self, connector_key: str) -> SourceRecord | None:
         rows = await self._request(
@@ -108,6 +110,33 @@ class SupabaseRepository:
         return await self._request(
             "POST", "rpc/claim_processing_jobs", json={"p_worker": worker_id, "p_batch_size": limit}
         )
+
+    async def representative_pending_jobs(
+        self,
+        connector_order: tuple[str, ...] = ("rss", "github", "arxiv", "huggingface"),
+        limit: int = 4,
+    ) -> list[dict[str, Any]]:
+        rows = await self._request(
+            "GET",
+            "processing_jobs",
+            params={
+                "select": "id,source_item_id,status,priority,created_at",
+                "status": "eq.Pending",
+                "order": "priority.desc,created_at.asc,id.asc",
+                "limit": "100",
+            },
+        )
+        first_by_connector: dict[str, dict[str, Any]] = {}
+        for row in rows:
+            items = await self.source_items_for_job(row)
+            if not items:
+                continue
+            connector = items[0].get("connector_key")
+            if connector in connector_order and connector not in first_by_connector:
+                first_by_connector[connector] = {**row, "connector_key": connector}
+        return [first_by_connector[key] for key in connector_order if key in first_by_connector][
+            : max(0, min(limit, len(connector_order)))
+        ]
 
     async def replay_job(self) -> dict[str, Any] | None:
         rows = await self._request(

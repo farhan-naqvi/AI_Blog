@@ -19,6 +19,13 @@ Run continuously:
 signalwatch worker --watch --interval 60
 ```
 
+Run one job or a bounded pass (jobs are claimed one at a time):
+
+```powershell
+python -m signalwatch.cli worker --max-jobs 1
+python -m signalwatch.cli worker --max-jobs 5
+```
+
 Before starting the worker, verify Ollama without downloading a model:
 
 ```powershell

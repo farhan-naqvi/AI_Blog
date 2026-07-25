@@ -31,11 +31,15 @@ class LocalWorker:
         self.provider = provider
         self.worker_id = worker_id
 
-    async def run_once(self, batch_size: int = 5) -> dict[str, int]:
-        jobs = await self.repository.claim_jobs(self.worker_id, batch_size)
-        completed = failed = unavailable = 0
+    async def run_once(self, max_jobs: int = 5) -> dict[str, int]:
+        claimed = completed = failed = unavailable = 0
         async with httpx.AsyncClient(timeout=httpx.Timeout(30.0)) as client:
-            for job in jobs:
+            for _ in range(max(0, max_jobs)):
+                jobs = await self.repository.claim_jobs(self.worker_id, 1)
+                if not jobs:
+                    break
+                claimed += 1
+                job = jobs[0]
                 try:
                     await self._process(job, client)
                     completed += 1
@@ -53,7 +57,7 @@ class LocalWorker:
                         "job_failed", extra={"subsystem": "worker", "category": "processing"}
                     )
                     failed += 1
-        return {"claimed": len(jobs), "completed": completed, "failed": failed, "unavailable": unavailable}
+        return {"claimed": claimed, "completed": completed, "failed": failed, "unavailable": unavailable}
 
     async def _process(
         self,
@@ -72,7 +76,7 @@ class LocalWorker:
             readable_text = await fetch_readable_text(client, item["canonical_url"] or item["url"])
             if transitions is not None:
                 transitions.append({"state": "source_fetched_and_extracted_locally", "created": False})
-            extracted, _ = await self._extract(source_items, readable_text, transitions)
+            extracted, timings = await self._extract(source_items, readable_text, transitions)
         finally:
             readable_text = ""
         allowed_ids = {row["id"] for row in source_items}
@@ -107,7 +111,11 @@ class LocalWorker:
         return {
             "verification_status": decision.verification_status,
             "publication_status": decision.publication_status,
+            "deterministic_reasons": decision.reasons,
+            "confirmed_claims": len(extracted.confirmed_claims),
+            "reported_claims": len(extracted.reported_claims),
             "linkedin_draft_created": draft_created,
+            **timings,
         }
 
     async def _extract(
@@ -189,7 +197,55 @@ class LocalWorker:
             return {"ok": False, "reason": "no_pending_job", "transitions": []}
         return await self._run_claimed_diagnostic(jobs[0])
 
+    async def run_representative_batch(self, max_jobs: int = 4) -> dict[str, Any]:
+        candidates = await self.repository.representative_pending_jobs(limit=max_jobs)
+        results: list[dict[str, Any]] = []
+        previous_failure: str | None = None
+        consecutive_failures = 0
+        for candidate in candidates:
+            category = candidate["connector_key"]
+            claimed = await self.repository.claim_replay_job(self.worker_id, candidate["id"])
+            if len(claimed) != 1:
+                result = {"ok": False, "reason": "specific_job_claim_failed", "transitions": []}
+            else:
+                claimed[0]["connector_key"] = category
+                result = await self._run_claimed_diagnostic(claimed[0])
+            transitions = result.get("transitions", [])
+            details = result.get("result", {})
+            safe_result = {
+                "source_category": category,
+                "stage_a": any(row.get("state") == "factual_extraction_validated" for row in transitions),
+                "stage_b": any(row.get("state") == "bounded_analysis_validated" for row in transitions),
+                "repair_used": bool(
+                    details.get("stage_a_repair_used") or details.get("stage_b_repair_used")
+                ),
+                "job_state": "Completed" if result.get("ok") else "Pending",
+                "development_state": details.get("verification_status"),
+                "publication_state": details.get("publication_status"),
+                "deterministic_reasons": details.get("deterministic_reasons", []),
+                "confirmed_claims": details.get("confirmed_claims", 0),
+                "reported_claims": details.get("reported_claims", 0),
+                "duration_seconds": result.get("duration_seconds"),
+                "failure": None if result.get("ok") else result.get("reason"),
+            }
+            results.append(safe_result)
+            failure = safe_result["failure"]
+            if failure:
+                consecutive_failures = consecutive_failures + 1 if failure == previous_failure else 1
+                previous_failure = failure
+                if consecutive_failures >= 2:
+                    break
+            else:
+                previous_failure = None
+                consecutive_failures = 0
+        return {
+            "selected_categories": [row["connector_key"] for row in candidates],
+            "processed": len(results),
+            "results": results,
+        }
+
     async def _run_claimed_diagnostic(self, job: dict[str, Any]) -> dict[str, Any]:
+        started = perf_counter()
         transitions: list[dict[str, Any]] = []
         transitions.append({"state": "job_claimed", "created": False})
         async with httpx.AsyncClient(timeout=httpx.Timeout(30.0)) as client:
@@ -209,7 +265,12 @@ class LocalWorker:
                         },
                     ]
                 )
-                return {"ok": True, "transitions": transitions}
+                return {
+                    "ok": True,
+                    "transitions": transitions,
+                    "result": result,
+                    "duration_seconds": round(perf_counter() - started, 2),
+                }
             except (ModelUnavailableError, StructuredGenerationError, ValueError, RuntimeError) as exc:
                 await self.repository.fail_job(
                     job["id"], self.worker_id, str(exc), retryable=True
@@ -217,4 +278,9 @@ class LocalWorker:
                 transitions.append(
                     {"state": "job_requeued", "created": False, "error_type": type(exc).__name__}
                 )
-                return {"ok": False, "reason": type(exc).__name__, "transitions": transitions}
+                return {
+                    "ok": False,
+                    "reason": type(exc).__name__,
+                    "transitions": transitions,
+                    "duration_seconds": round(perf_counter() - started, 2),
+                }

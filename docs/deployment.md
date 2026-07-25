@@ -16,10 +16,10 @@ Add repository secrets:
 
 - `SUPABASE_URL`
 - `SUPABASE_SERVICE_ROLE_KEY`
-- `SOURCE_GITHUB_TOKEN` (optional but strongly recommended for rate limits)
+- `SOURCE_GITHUB_TOKEN` (optional; the workflow uses GitHub's scoped Actions token by default)
 - `HUGGINGFACE_TOKEN` (optional)
 
-The workflow supports a manual smoke run and one manually selected connector. Scheduled collection is disabled unless the repository variable `ENABLE_SCHEDULED_COLLECTION` is exactly `true`. When enabled, it runs RSS hourly, GitHub every two hours, Hugging Face every three hours, and arXiv twice daily. Source-level intervals still apply, and overlapping runs are serialized.
+The workflow supports a manual smoke run and one manually selected connector with bounded source and item limits. Scheduled collection is disabled unless the repository variable `ENABLE_SCHEDULED_COLLECTION` is exactly `true`. `COLLECTION_SOURCE_LIMIT` and `COLLECTION_ITEM_LIMIT` optionally set scheduled-run limits (safe defaults: 2 sources and 10 items per source). When enabled, it runs RSS hourly, GitHub every two hours, Hugging Face every three hours, and arXiv twice daily. Source-level intervals still apply, and overlapping runs are serialized.
 
 First run **Actions > Collect public AI sources > Run workflow > smoke**. Do not enable schedules until this passes and the local one-item end-to-end diagnostic passes.
 

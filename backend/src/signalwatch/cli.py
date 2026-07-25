@@ -30,16 +30,17 @@ async def _run(args: argparse.Namespace) -> None:
         elif args.command == "collect":
             github_token = settings.github_token.get_secret_value() if settings.github_token else None
             hf_token = settings.huggingface_token.get_secret_value() if settings.huggingface_token else None
+            item_limit = args.item_limit or settings.collection_batch_size
             service = CollectionService(
                 repository,
                 {
-                    "rss": RssCollector(),
-                    "github": GitHubCollector(github_token),
-                    "arxiv": ArxivCollector(),
-                    "huggingface": HuggingFaceCollector(hf_token),
+                    "rss": RssCollector(max_items=item_limit),
+                    "github": GitHubCollector(github_token, max_items=item_limit),
+                    "arxiv": ArxivCollector(max_items=item_limit),
+                    "huggingface": HuggingFaceCollector(hf_token, max_items=item_limit),
                 },
             )
-            result = await service.run(args.connector)
+            result = await service.run(args.connector, args.source_limit)
         else:
             provider = OllamaProvider(str(settings.ollama_base_url), settings.ollama_model)
             if args.command == "worker":
@@ -47,7 +48,7 @@ async def _run(args: argparse.Namespace) -> None:
                 if args.watch:
                     last_daily = last_weekly = None
                     while True:
-                        result = await worker.run_once(args.batch_size)
+                        result = await worker.run_once(args.max_jobs)
                         now = datetime.now(UTC)
                         if now.hour >= 6 and last_daily != now.date():
                             await generate_report(repository, provider, "Daily")
@@ -58,7 +59,7 @@ async def _run(args: argparse.Namespace) -> None:
                         print(json.dumps(result, separators=(",", ":")), flush=True)
                         await asyncio.sleep(args.interval)
                 else:
-                    result = await worker.run_once(args.batch_size)
+                    result = await worker.run_once(args.max_jobs)
             elif args.command == "e2e-verify":
                 result = await LocalWorker(
                     repository, provider, settings.local_worker_id
@@ -71,6 +72,10 @@ async def _run(args: argparse.Namespace) -> None:
                 result = await LocalWorker(
                     repository, provider, settings.local_worker_id
                 ).retry_replayed_job_once()
+            elif args.command == "controlled-batch":
+                result = await LocalWorker(
+                    repository, provider, settings.local_worker_id
+                ).run_representative_batch(args.max_jobs)
             else:
                 result = await generate_report(repository, provider, args.report_type)
         print(json.dumps(result, separators=(",", ":")))
@@ -85,13 +90,17 @@ def main() -> None:
     subparsers = parser.add_subparsers(dest="command", required=True)
     collect = subparsers.add_parser("collect")
     collect.add_argument("--connector", choices=("rss", "github", "arxiv", "huggingface"))
+    collect.add_argument("--source-limit", type=int, choices=range(1, 51))
+    collect.add_argument("--item-limit", type=int, choices=range(1, 101))
     subparsers.add_parser("smoke-test-collectors")
     subparsers.add_parser("check-ollama")
     subparsers.add_parser("e2e-verify")
     subparsers.add_parser("replay-extraction")
     subparsers.add_parser("retry-replayed-job")
+    controlled_batch = subparsers.add_parser("controlled-batch")
+    controlled_batch.add_argument("--max-jobs", type=int, choices=range(1, 5), default=4)
     worker = subparsers.add_parser("worker")
-    worker.add_argument("--batch-size", type=int, default=5)
+    worker.add_argument("--max-jobs", "--batch-size", dest="max_jobs", type=int, default=5)
     worker.add_argument("--watch", action="store_true")
     worker.add_argument("--interval", type=int, default=60)
     report = subparsers.add_parser("report")

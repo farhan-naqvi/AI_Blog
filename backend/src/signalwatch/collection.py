@@ -23,8 +23,10 @@ class CollectionService:
         self.collectors = collectors
         self.semaphore = asyncio.Semaphore(concurrency)
 
-    async def run(self, connector_key: str | None = None) -> dict[str, int]:
-        sources = await self.repository.due_sources(connector_key)
+    async def run(
+        self, connector_key: str | None = None, source_limit: int | None = None
+    ) -> dict[str, int]:
+        sources = await self.repository.due_sources(connector_key, source_limit)
         return await self.run_sources(sources)
 
     async def run_sources(self, sources) -> dict[str, int]:

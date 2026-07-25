@@ -5,6 +5,7 @@ from pydantic import ValidationError
 
 from signalwatch.extraction import compose_development
 from signalwatch.models import Category, DevelopmentAnalysis, EventType, FactualExtraction
+from signalwatch.prompts import factual_extraction_prompt
 
 
 def minimal_factual(**overrides):
@@ -23,6 +24,16 @@ def test_unknown_entities_date_and_empty_lists_are_valid() -> None:
     assert factual.product is None
     assert factual.release_date is None
     assert factual.confirmed_claims == factual.reported_claims == factual.limitations == []
+
+
+def test_factual_prompt_separates_source_facts_from_reported_performance_claims() -> None:
+    prompt = factual_extraction_prompt(
+        [{"title": "Release", "published_at": None, "excerpt": ""}], "Short source"
+    )
+    assert "directly observable source facts" in prompt
+    assert "not independently verified" in prompt
+    assert "performance, benchmark, capability, or outcome assertions" in prompt
+    assert "promotional language" in prompt
 
 
 def test_known_enum_aliases_are_normalized() -> None:

@@ -14,8 +14,12 @@ class OfflineProvider:
 class FakeRepository:
     def __init__(self):
         self.failures = []
+        self.claim_calls = 0
 
     async def claim_jobs(self, worker_id, limit):
+        self.claim_calls += 1
+        if self.claim_calls > 1:
+            return []
         return [{"id": "job-1", "source_item_id": "item-1"}]
 
     async def source_items_for_job(self, job):
@@ -42,6 +46,7 @@ async def test_worker_requeues_when_ollama_is_unavailable(monkeypatch) -> None:
     result = await LocalWorker(repository, OfflineProvider(), "worker-1").run_once()
     assert result["unavailable"] == 1
     assert repository.failures == [("job-1", "worker-1", True)]
+    assert repository.claim_calls == 1
 
 
 class DraftFailureProvider:
@@ -90,3 +95,14 @@ async def test_draft_failure_does_not_requeue_completed_development(
     ).run_once()
     assert result == {"claimed": 1, "completed": 1, "failed": 0, "unavailable": 0}
     assert repository.failures == []
+
+
+class EmptyRepository(FakeRepository):
+    async def claim_jobs(self, worker_id, limit):
+        return []
+
+
+@pytest.mark.asyncio
+async def test_bounded_worker_exits_when_queue_is_empty() -> None:
+    result = await LocalWorker(EmptyRepository(), OfflineProvider(), "worker-1").run_once(5)
+    assert result == {"claimed": 0, "completed": 0, "failed": 0, "unavailable": 0}

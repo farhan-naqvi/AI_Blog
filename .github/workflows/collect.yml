@@ -20,6 +20,18 @@ on:
         type: choice
         default: rss
         options: [rss, github, huggingface, arxiv]
+      source_limit:
+        description: Maximum due sources for a connector run
+        required: true
+        type: choice
+        default: "2"
+        options: ["1", "2", "5", "10"]
+      item_limit:
+        description: Maximum entries fetched from each source
+        required: true
+        type: choice
+        default: "10"
+        options: ["3", "10", "25", "50"]
 
 permissions:
   contents: read
@@ -48,6 +60,8 @@ jobs:
           SCHEDULE: ${{ github.event.schedule }}
           MANUAL_MODE: ${{ inputs.mode }}
           MANUAL_CONNECTOR: ${{ inputs.connector }}
+          SOURCE_LIMIT: ${{ inputs.source_limit || vars.COLLECTION_SOURCE_LIMIT || '2' }}
+          ITEM_LIMIT: ${{ inputs.item_limit || vars.COLLECTION_ITEM_LIMIT || '10' }}
         run: |
           if [[ "$MANUAL_MODE" == "smoke" ]]; then
             echo "value=signalwatch smoke-test-collectors" >> "$GITHUB_OUTPUT"
@@ -61,11 +75,13 @@ jobs:
             "43 */12 * * *") connector="arxiv" ;;
           esac
           test -n "$connector"
-          echo "value=signalwatch collect --connector $connector" >> "$GITHUB_OUTPUT"
+          [[ "$SOURCE_LIMIT" =~ ^[0-9]+$ ]]
+          [[ "$ITEM_LIMIT" =~ ^[0-9]+$ ]]
+          echo "value=signalwatch collect --connector $connector --source-limit $SOURCE_LIMIT --item-limit $ITEM_LIMIT" >> "$GITHUB_OUTPUT"
       - name: Collect due sources
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          GITHUB_TOKEN: ${{ secrets.SOURCE_GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.SOURCE_GITHUB_TOKEN || github.token }}
           HUGGINGFACE_TOKEN: ${{ secrets.HUGGINGFACE_TOKEN }}
         run: ${{ steps.command.outputs.value }}

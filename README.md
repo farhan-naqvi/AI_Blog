@@ -46,6 +46,12 @@ Run the bounded four-connector smoke test (one source and at most three fetched 
 python -m signalwatch.cli smoke-test-collectors
 ```
 
+Run one bounded connector collection without invoking Ollama:
+
+```powershell
+python -m signalwatch.cli collect --connector rss --source-limit 2 --item-limit 10
+```
+
 Start Ollama, set `OLLAMA_MODEL` to an exact locally installed tag, verify it, then run the persistent local worker:
 
 ```powershell

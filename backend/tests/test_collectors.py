@@ -3,6 +3,7 @@ import pytest
 
 from signalwatch.collectors.github import GitHubCollector
 from signalwatch.collectors.huggingface import HuggingFaceCollector
+from signalwatch.collection import CollectionService
 from signalwatch.models import SourceRecord
 
 
@@ -39,3 +40,18 @@ async def test_smoke_limits_are_sent_to_apis() -> None:
         await HuggingFaceCollector(max_items=3).collect(source("huggingface", {"author": "acme"}), client)
     assert seen["api.github.com"]["per_page"] == "3"
     assert seen["huggingface.co"]["limit"] == "3"
+
+
+@pytest.mark.asyncio
+async def test_collection_passes_source_limit_to_repository() -> None:
+    class Repository:
+        called_with = None
+
+        async def due_sources(self, connector_key, limit):
+            self.called_with = (connector_key, limit)
+            return []
+
+    repository = Repository()
+    result = await CollectionService(repository, {}).run("rss", source_limit=2)
+    assert repository.called_with == ("rss", 2)
+    assert result["sources_checked"] == 0
