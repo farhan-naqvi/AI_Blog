@@ -25,21 +25,25 @@ class CollectionService:
 
     async def run(self, connector_key: str | None = None) -> dict[str, int]:
         sources = await self.repository.due_sources(connector_key)
+        return await self.run_sources(sources)
+
+    async def run_sources(self, sources) -> dict[str, int]:
         results = await asyncio.gather(*(self._collect_source(source) for source in sources))
         return {
             "sources_checked": len(sources),
             "items_detected": sum(result[0] for result in results),
             "items_new": sum(result[1] for result in results),
-            "errors": sum(result[2] for result in results),
+            "jobs_created": sum(result[2] for result in results),
+            "errors": sum(result[3] for result in results),
         }
 
-    async def _collect_source(self, source) -> tuple[int, int, int]:
+    async def _collect_source(self, source) -> tuple[int, int, int, int]:
         collector = self.collectors.get(source.connector_key)
         if collector is None:
             await self.repository.record_source_result(
                 source.id, success=False, error=f"unsupported connector: {source.connector_key}"
             )
-            return 0, 0, 1
+            return 0, 0, 0, 1
         started = perf_counter()
         try:
             async with self.semaphore:
@@ -51,13 +55,23 @@ class CollectionService:
                         except (httpx.TimeoutException, httpx.NetworkError, httpx.HTTPStatusError):
                             if attempt == 2:
                                 raise
-                            logger.warning("source_retry", extra={"source_id": source.id})
+                            logger.warning(
+                                "source_retry",
+                                extra={
+                                    "subsystem": f"collector:{source.connector_key}",
+                                    "retry_count": attempt + 1,
+                                    "category": "network",
+                                },
+                            )
                             await asyncio.sleep(2**attempt)
             new_count = 0
+            queued_count = 0
             for item in result.items:
                 outcome = await self.repository.ingest_item(item, rejection_reason(item))
                 if outcome and outcome.get("inserted"):
                     new_count += 1
+                if outcome and outcome.get("queued"):
+                    queued_count += 1
             await self.repository.record_source_result(
                 source.id,
                 success=True,
@@ -67,14 +81,18 @@ class CollectionService:
             logger.info(
                 "source_checked",
                 extra={
-                    "source_id": source.id,
+                    "subsystem": f"collector:{source.connector_key}",
                     "duration_ms": round((perf_counter() - started) * 1000),
                     "result_count": len(result.items),
                     "new_count": new_count,
+                    "category": "success",
                 },
             )
-            return len(result.items), new_count, 0
+            return len(result.items), new_count, queued_count, 0
         except (httpx.HTTPError, ValueError, RuntimeError) as exc:
             await self.repository.record_source_result(source.id, success=False, error=str(exc))
-            logger.exception("source_failed", extra={"source_id": source.id})
-            return 0, 0, 1
+            logger.exception(
+                "source_failed",
+                extra={"subsystem": f"collector:{source.connector_key}", "category": "failure"},
+            )
+            return 0, 0, 0, 1

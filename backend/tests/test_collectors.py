@@ -26,3 +26,16 @@ async def test_huggingface_model_normalization() -> None:
         result = await HuggingFaceCollector().collect(source("huggingface", {"author": "acme"}), client)
     assert result.items[0].source_identifier == "acme/model-v2"
     assert "text-generation" in result.items[0].excerpt
+
+
+@pytest.mark.asyncio
+async def test_smoke_limits_are_sent_to_apis() -> None:
+    seen = {}
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen[request.url.host] = dict(request.url.params)
+        return httpx.Response(200, json=[])
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        await GitHubCollector(max_items=3).collect(source("github", {"repository": "acme/runtime"}), client)
+        await HuggingFaceCollector(max_items=3).collect(source("huggingface", {"author": "acme"}), client)
+    assert seen["api.github.com"]["per_page"] == "3"
+    assert seen["huggingface.co"]["limit"] == "3"

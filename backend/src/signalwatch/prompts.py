@@ -1,30 +1,37 @@
 import json
 from typing import Any
 
-PROMPT_VERSION = "development-v1"
+from .models import FactualExtraction
+
+PROMPT_VERSION = "development-v2"
 
 
-def development_prompt(source_items: list[dict[str, Any]], readable_text: str) -> str:
-    evidence = [
-        {
-            "source_item_id": item["id"],
-            "url": item["canonical_url"] or item["url"],
-            "title": item["title"],
-            "published_at": item.get("published_at"),
-            "excerpt": item.get("excerpt", ""),
-            "is_primary": item.get("is_primary_source", False),
-            "evidence_role": item.get("evidence_role", "Primary announcement"),
-        }
-        for item in source_items
-    ]
+def factual_extraction_prompt(source_items: list[dict[str, Any]], readable_text: str) -> str:
+    item = source_items[0]
+    metadata = {
+        "title": item["title"],
+        "published_at": item.get("published_at"),
+        "excerpt": item.get("excerpt", ""),
+    }
     return (
-        "Extract one potential AI development from the evidence. Confirmed claims must each map "
-        "to at least one zero-based claim index in evidence.claim_indexes. Report uncertainty and "
-        "limitations explicitly. Headline must be factual, not promotional. If a field is unknown, "
-        "use null where allowed and do not infer it.\n\nEVIDENCE METADATA:\n"
-        + json.dumps(evidence, ensure_ascii=False, separators=(",", ":"))
+        "Extract factual information using only the supplied source. Return null for unknown "
+        "organisation, product, or date. Return empty arrays when no supported claims or "
+        "limitations exist. Do not invent dates, entities, limitations, claims, or metrics. "
+        "Output only the schema-conforming object.\n\nSOURCE METADATA:\n"
+        + json.dumps(metadata, ensure_ascii=False, separators=(",", ":"))
         + "\n\nTEMPORARY SOURCE TEXT:\n"
-        + readable_text[:40_000]
+        + readable_text[:24_000]
+    )
+
+
+def development_analysis_prompt(factual: FactualExtraction) -> str:
+    return (
+        "Analyze only the validated factual extraction below. Do not repeat or change factual "
+        "claims. Explain why it matters conservatively. No previous-version evidence was supplied, "
+        "so return null for what_changed. Return empty arrays when affected groups or watch items "
+        "are unsupported. Classify importance conservatively and do not invent facts. Output only "
+        "the schema-conforming object.\n\nFACTUAL EXTRACTION:\n"
+        + json.dumps(factual.model_dump(mode="json"), ensure_ascii=False, separators=(",", ":"))
     )
 
 

@@ -1,4 +1,4 @@
-from .models import ExtractedDevelopment, VerificationDecision
+from .models import EventType, ExtractedDevelopment, VerificationDecision
 
 STRONG_PRIMARY_ROLES = {"Primary announcement", "Documentation", "Repository", "Research paper"}
 SENSITIVE_TERMS = {
@@ -27,11 +27,15 @@ def verify_development(
     sensitive_text = " ".join(
         [extracted.event_type, extracted.category, extracted.headline, *extracted.confirmed_claims]
     ).casefold()
-    sensitive = any(term in sensitive_text for term in SENSITIVE_TERMS)
+    sensitive = extracted.event_type is EventType.SECURITY or any(
+        term in sensitive_text for term in SENSITIVE_TERMS
+    )
     if sensitive:
         reasons.append("sensitive category requires owner review")
     if not strong_primary:
         reasons.append("no strong primary source")
+    if not extracted.confirmed_claims:
+        reasons.append("no confirmed factual claims")
     if contradictory:
         reasons.append("evidence contains a major contradiction")
     if unresolved_duplicate:
@@ -47,7 +51,7 @@ def verify_development(
             reasons=reasons,
             exception_type="Sensitive" if sensitive else "Evidence conflict",
         )
-    if not strong_primary:
+    if not strong_primary or not extracted.confirmed_claims:
         return VerificationDecision(
             verification_status="Developing",
             confidence_label="Low",

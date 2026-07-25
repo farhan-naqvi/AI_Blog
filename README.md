@@ -16,25 +16,16 @@ The frontend lives at the repository root because the Sites runtime expects that
 
 ## Local setup
 
-1. Copy `.env.example` to `.env` and fill the Supabase values.
-2. Run `supabase/migrations/202607250001_initial_schema.sql`, then `supabase/seed.sql` in Supabase SQL Editor.
-3. Enable `pg_cron`, then apply `supabase/migrations/202607250002_cleanup_schedule.sql`.
-4. Create one Supabase Auth user, disable public sign-ups, and set the owner:
-
-   ```sql
-   update public.private_settings
-   set owner_user_id = (select id from auth.users where lower(email) = lower('owner@example.com')),
-       owner_email = 'owner@example.com';
-   ```
-
-5. Install and run the UI:
+1. Follow [Guided Supabase activation](docs/supabase-setup.md). Apply migrations with the Supabase CLI; do not rerun the initial SQL manually.
+2. Copy `.env.example` to `.env` and fill values locally. Create `.env.local` with only the two `NEXT_PUBLIC_SUPABASE_*` values.
+3. Install and run the UI:
 
    ```powershell
    npm install
    npm run dev
    ```
 
-6. Install the Python package:
+4. Install the Python package:
 
    ```powershell
    python -m pip install -e ".\backend[test]"
@@ -49,10 +40,18 @@ signalwatch collect
 signalwatch collect --connector github
 ```
 
-Start Ollama, ensure the configured model is installed, then run the persistent local worker:
+Run the bounded four-connector smoke test (one source and at most three fetched entries per connector):
 
 ```powershell
-ollama pull qwen2.5:7b
+python -m signalwatch.cli smoke-test-collectors
+```
+
+Start Ollama, set `OLLAMA_MODEL` to an exact locally installed tag, verify it, then run the persistent local worker:
+
+```powershell
+ollama list
+python -m signalwatch.cli check-ollama
+python -m signalwatch.cli e2e-verify
 signalwatch worker --watch --interval 60
 ```
 
@@ -68,6 +67,10 @@ uvicorn signalwatch.api:app --host 127.0.0.1 --port 8000
 
 ```powershell
 python -m pytest backend -q
+npx tsc --noEmit
+npm run lint
+npm run test
+npx supabase test db
 npm run build
 ```
 

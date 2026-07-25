@@ -1,9 +1,11 @@
-from datetime import UTC, datetime
-from typing import Annotated, Literal
+from datetime import UTC, date, datetime
+from enum import StrEnum
+from typing import Annotated, Any, Literal
 
 from pydantic import AnyHttpUrl, BaseModel, ConfigDict, Field, field_validator, model_validator
 
 ShortText = Annotated[str, Field(min_length=1, max_length=500)]
+ClaimText = Annotated[str, Field(min_length=1, max_length=500)]
 EvidenceRole = Literal[
     "Primary announcement",
     "Documentation",
@@ -12,6 +14,173 @@ EvidenceRole = Literal[
     "Independent confirmation",
     "Discovery signal",
 ]
+
+
+class EventType(StrEnum):
+    RELEASE = "Release"
+    RESEARCH = "Research"
+    REGULATION = "Regulation"
+    SECURITY = "Security"
+    PARTNERSHIP = "Partnership"
+    FUNDING = "Funding"
+    OTHER = "Other"
+
+
+class Category(StrEnum):
+    MODELS = "Models"
+    RESEARCH = "Research"
+    DEVELOPER_TOOLS = "Developer tools"
+    INFRASTRUCTURE = "Infrastructure"
+    AGENTS = "Agents"
+    SECURITY = "Security"
+    ROBOTICS = "Robotics"
+    REGULATION = "Regulation"
+    OTHER = "Other"
+
+
+EVENT_TYPE_ALIASES = {
+    "release": EventType.RELEASE,
+    "model release": EventType.RELEASE,
+    "software release": EventType.RELEASE,
+    "research": EventType.RESEARCH,
+    "paper": EventType.RESEARCH,
+    "policy": EventType.REGULATION,
+    "regulation": EventType.REGULATION,
+    "security": EventType.SECURITY,
+    "vulnerability": EventType.SECURITY,
+    "partnership": EventType.PARTNERSHIP,
+    "funding": EventType.FUNDING,
+    "other": EventType.OTHER,
+}
+CATEGORY_ALIASES = {
+    "model": Category.MODELS,
+    "models": Category.MODELS,
+    "research": Category.RESEARCH,
+    "developer tool": Category.DEVELOPER_TOOLS,
+    "developer tools": Category.DEVELOPER_TOOLS,
+    "developer tooling": Category.DEVELOPER_TOOLS,
+    "open source": Category.DEVELOPER_TOOLS,
+    "infrastructure": Category.INFRASTRUCTURE,
+    "ai infrastructure": Category.INFRASTRUCTURE,
+    "agents": Category.AGENTS,
+    "ai agents": Category.AGENTS,
+    "security": Category.SECURITY,
+    "ai security": Category.SECURITY,
+    "security vulnerability": Category.SECURITY,
+    "robotics": Category.ROBOTICS,
+    "regulation": Category.REGULATION,
+    "policy": Category.REGULATION,
+    "other": Category.OTHER,
+}
+
+
+def _enum_alias(value: Any, aliases: dict[str, StrEnum]) -> Any:
+    if isinstance(value, str):
+        cleaned = " ".join(value.replace("_", " ").replace("-", " ").split())
+        return aliases.get(cleaned.casefold(), cleaned)
+    return value
+
+
+def _optional_text(value: Any) -> Any:
+    if isinstance(value, str):
+        cleaned = " ".join(value.split())
+        return cleaned or None
+    return value
+
+
+def _bounded_text_list(value: Any, limit: int) -> Any:
+    if not isinstance(value, list):
+        return value
+    result: list[Any] = []
+    seen: set[str] = set()
+    for item in value:
+        if isinstance(item, str):
+            item = " ".join(item.split())
+            if not item:
+                continue
+            key = item.casefold()
+            if key in seen:
+                continue
+            seen.add(key)
+        result.append(item)
+        if len(result) == limit:
+            break
+    return result
+
+
+class FactualExtraction(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    event_type: EventType
+    organisation: str | None = Field(default=None, max_length=200)
+    product: str | None = Field(default=None, max_length=200)
+    release_date: date | None = None
+    category: Category
+    factual_summary: str = Field(min_length=20, max_length=900)
+    confirmed_claims: list[ClaimText] = Field(default_factory=list, max_length=8)
+    reported_claims: list[ClaimText] = Field(default_factory=list, max_length=8)
+    limitations: list[ClaimText] = Field(default_factory=list, max_length=6)
+
+    @field_validator("event_type", mode="before")
+    @classmethod
+    def normalize_event_type(cls, value: Any) -> Any:
+        return _enum_alias(value, EVENT_TYPE_ALIASES)
+
+    @field_validator("category", mode="before")
+    @classmethod
+    def normalize_category(cls, value: Any) -> Any:
+        return _enum_alias(value, CATEGORY_ALIASES)
+
+    @field_validator("organisation", "product", mode="before")
+    @classmethod
+    def normalize_optional_text(cls, value: Any) -> Any:
+        return _optional_text(value)
+
+    @field_validator("release_date", mode="before")
+    @classmethod
+    def normalize_release_date(cls, value: Any) -> Any:
+        if isinstance(value, datetime):
+            return value.date()
+        if isinstance(value, str):
+            cleaned = value.strip()
+            if not cleaned:
+                return None
+            try:
+                return date.fromisoformat(cleaned)
+            except ValueError:
+                try:
+                    return datetime.fromisoformat(cleaned.replace("Z", "+00:00")).date()
+                except ValueError:
+                    return cleaned
+        return value
+
+    @field_validator("confirmed_claims", "reported_claims", "limitations", mode="before")
+    @classmethod
+    def normalize_factual_lists(cls, value: Any, info) -> Any:
+        limits = {"confirmed_claims": 8, "reported_claims": 8, "limitations": 6}
+        return _bounded_text_list(value, limits[info.field_name])
+
+
+class DevelopmentAnalysis(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    why_it_matters: str = Field(min_length=20, max_length=900)
+    what_changed: str | None = Field(default=None, max_length=900)
+    affected_groups: list[ShortText] = Field(default_factory=list, max_length=8)
+    watch_next: list[ShortText] = Field(default_factory=list, max_length=8)
+    importance_label: Literal["Major", "Notable", "Incremental"] = "Incremental"
+    importance_reasons: list[ShortText] = Field(default_factory=list, max_length=6)
+
+    @field_validator("what_changed", mode="before")
+    @classmethod
+    def normalize_optional_change(cls, value: Any) -> Any:
+        return _optional_text(value)
+
+    @field_validator("affected_groups", "watch_next", "importance_reasons", mode="before")
+    @classmethod
+    def normalize_analysis_lists(cls, value: Any, info) -> Any:
+        limits = {"affected_groups": 8, "watch_next": 8, "importance_reasons": 6}
+        return _bounded_text_list(value, limits[info.field_name])
 
 
 class SourceRecord(BaseModel):
@@ -64,30 +233,39 @@ class EvidenceReference(BaseModel):
 class ExtractedDevelopment(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
-    event_type: ShortText
+    event_type: EventType
     organisation: str | None = Field(default=None, max_length=200)
     product: str | None = Field(default=None, max_length=200)
-    release_date: datetime | None = None
-    category: ShortText
+    release_date: date | None = None
+    category: Category
     headline: str = Field(min_length=8, max_length=240)
-    confirmed_claims: list[ShortText] = Field(min_length=1, max_length=12)
+    confirmed_claims: list[ShortText] = Field(default_factory=list, max_length=12)
     reported_claims: list[ShortText] = Field(default_factory=list, max_length=12)
     limitations: list[ShortText] = Field(default_factory=list, max_length=10)
     summary: str = Field(min_length=40, max_length=1600)
     why_it_matters: str = Field(min_length=20, max_length=1400)
-    what_changed: str = Field(min_length=20, max_length=1400)
-    who_affected: str = Field(min_length=5, max_length=800)
-    watch_next: str = Field(min_length=5, max_length=800)
-    confidence_reasons: list[ShortText] = Field(min_length=1, max_length=8)
-    importance_reasons: list[ShortText] = Field(min_length=1, max_length=8)
+    what_changed: str | None = Field(default=None, max_length=1400)
+    who_affected: str = Field(default="", max_length=800)
+    watch_next: str = Field(default="", max_length=800)
+    confidence_reasons: list[ShortText] = Field(default_factory=list, max_length=8)
+    importance_reasons: list[ShortText] = Field(default_factory=list, max_length=8)
     importance_label: Literal["Major", "Notable", "Incremental"]
     evidence: list[EvidenceReference] = Field(min_length=1, max_length=12)
 
+    @field_validator("event_type", mode="before")
+    @classmethod
+    def normalize_final_event_type(cls, value: Any) -> Any:
+        return _enum_alias(value, EVENT_TYPE_ALIASES)
+
+    @field_validator("category", mode="before")
+    @classmethod
+    def normalize_final_category(cls, value: Any) -> Any:
+        return _enum_alias(value, CATEGORY_ALIASES)
+
     @field_validator("release_date")
     @classmethod
-    def release_date_is_not_future(cls, value: datetime | None) -> datetime | None:
-        comparable = value.replace(tzinfo=UTC) if value and value.tzinfo is None else value
-        if comparable and comparable > datetime.now(UTC):
+    def release_date_is_not_future(cls, value: date | None) -> date | None:
+        if value and value > datetime.now(UTC).date():
             raise ValueError("release date cannot be in the future")
         return value
 

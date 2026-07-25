@@ -2,7 +2,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from signalwatch.models import ExtractedDevelopment
+from signalwatch.models import DevelopmentAnalysis, ExtractedDevelopment, FactualExtraction
 
 
 @pytest.fixture
@@ -37,3 +37,30 @@ def extracted_payload() -> dict:
 @pytest.fixture
 def extracted(extracted_payload: dict) -> ExtractedDevelopment:
     return ExtractedDevelopment.model_validate(extracted_payload)
+
+
+@pytest.fixture
+def factual() -> FactualExtraction:
+    return FactualExtraction.model_validate({
+        "event_type": "release",
+        "organisation": "Example Org",
+        "product": "Example Runtime",
+        "release_date": "2026-01-01",
+        "category": "AI infrastructure",
+        "factual_summary": "Example Org published a documented update to its inference runtime.",
+        "confirmed_claims": ["The project published version 2."],
+        "reported_claims": [],
+        "limitations": [],
+    })
+
+
+@pytest.fixture
+def analysis() -> DevelopmentAnalysis:
+    return DevelopmentAnalysis.model_validate({
+        "why_it_matters": "The release may affect developers operating local inference systems.",
+        "what_changed": None,
+        "affected_groups": ["Local inference developers"],
+        "watch_next": [],
+        "importance_label": "Incremental",
+        "importance_reasons": ["One repository release is available."],
+    })

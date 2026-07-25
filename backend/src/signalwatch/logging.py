@@ -11,7 +11,15 @@ class JsonFormatter(logging.Formatter):
             "level": record.levelname,
             "event": record.getMessage(),
         }
-        for key in ("source_id", "duration_ms", "result_count", "new_count", "job_id"):
+        for key in (
+            "subsystem",
+            "status_code",
+            "duration_ms",
+            "result_count",
+            "new_count",
+            "retry_count",
+            "category",
+        ):
             value = getattr(record, key, None)
             if value is not None:
                 payload[key] = value
@@ -24,3 +32,5 @@ def configure_logging(level: str = "INFO") -> None:
     handler = logging.StreamHandler()
     handler.setFormatter(JsonFormatter())
     logging.basicConfig(level=level.upper(), handlers=[handler], force=True)
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)

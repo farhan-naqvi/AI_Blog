@@ -11,6 +11,9 @@ from .base import CollectionResult
 class ArxivCollector:
     key = "arxiv"
 
+    def __init__(self, max_items: int = 50) -> None:
+        self.max_items = max(1, min(max_items, 100))
+
     async def collect(self, source: SourceRecord, client: httpx.AsyncClient) -> CollectionResult:
         categories = source.connector_config.get("categories", ["cs.AI", "cs.LG"])
         query = " OR ".join(f"cat:{category}" for category in categories)
@@ -18,7 +21,7 @@ class ArxivCollector:
             {
                 "search_query": query,
                 "start": 0,
-                "max_results": 50,
+                "max_results": self.max_items,
                 "sortBy": "submittedDate",
                 "sortOrder": "descending",
             }
@@ -29,7 +32,7 @@ class ArxivCollector:
         if parsed.bozo and not parsed.entries:
             raise ValueError("invalid arXiv Atom response")
         items: list[CollectedItem] = []
-        for entry in parsed.entries:
+        for entry in parsed.entries[: self.max_items]:
             title = normalize_title(entry.get("title", ""))
             raw_url = entry.get("id")
             if not raw_url or len(title) < 3:

@@ -18,6 +18,7 @@ def test_primary_notable_item_auto_publishes(extracted: ExtractedDevelopment) ->
 
 
 def test_sensitive_item_is_held(extracted_payload: dict) -> None:
+    extracted_payload["event_type"] = "Security"
     extracted_payload["category"] = "Security vulnerability"
     extracted = ExtractedDevelopment.model_validate(extracted_payload)
     decision = verify_development(extracted, primary_source_item_ids={extracted.evidence[0].source_item_id})

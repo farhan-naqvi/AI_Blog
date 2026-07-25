@@ -2,8 +2,8 @@
 
 ## Supabase
 
-1. Create a project and apply the initial migration and seed.
-2. Create the owner Auth user and set `private_settings.owner_user_id` and `owner_email`.
+1. Follow [Guided Supabase activation](supabase-setup.md), including the dry run and RLS checks.
+2. Create the owner Auth user and bind `private_settings.owner_user_id`; clear the email fallback.
 3. Disable public user registration. Use a strong password and MFA if available.
 4. Enable `pg_cron` and apply the cleanup schedule migration.
 5. Confirm RLS is enabled on every table and the anon role cannot select private tables.
@@ -19,7 +19,9 @@ Add repository secrets:
 - `SOURCE_GITHUB_TOKEN` (optional but strongly recommended for rate limits)
 - `HUGGINGFACE_TOKEN` (optional)
 
-The workflow runs RSS hourly, GitHub every two hours, Hugging Face every three hours, and arXiv twice daily. Source-level intervals still apply, and overlapping runs are serialized.
+The workflow supports a manual smoke run and one manually selected connector. Scheduled collection is disabled unless the repository variable `ENABLE_SCHEDULED_COLLECTION` is exactly `true`. When enabled, it runs RSS hourly, GitHub every two hours, Hugging Face every three hours, and arXiv twice daily. Source-level intervals still apply, and overlapping runs are serialized.
+
+First run **Actions > Collect public AI sources > Run workflow > smoke**. Do not enable schedules until this passes and the local one-item end-to-end diagnostic passes.
 
 ## Frontend
 

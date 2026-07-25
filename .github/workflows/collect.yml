@@ -8,11 +8,18 @@ on:
     - cron: "43 */12 * * *"
   workflow_dispatch:
     inputs:
-      connector:
-        description: Connector to run (blank runs every due connector)
-        required: false
+      mode:
+        description: Safe smoke test or one connector
+        required: true
         type: choice
-        options: ["", rss, github, huggingface, arxiv]
+        default: smoke
+        options: [smoke, connector]
+      connector:
+        description: Connector used only when mode is connector
+        required: true
+        type: choice
+        default: rss
+        options: [rss, github, huggingface, arxiv]
 
 permissions:
   contents: read
@@ -23,6 +30,7 @@ concurrency:
 
 jobs:
   collect:
+    if: github.event_name == 'workflow_dispatch' || vars.ENABLE_SCHEDULED_COLLECTION == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -34,12 +42,17 @@ jobs:
           cache-dependency-path: backend/pyproject.toml
       - run: pip install ./backend
       - name: Select connector
-        id: connector
+        id: command
         shell: bash
         env:
           SCHEDULE: ${{ github.event.schedule }}
+          MANUAL_MODE: ${{ inputs.mode }}
           MANUAL_CONNECTOR: ${{ inputs.connector }}
         run: |
+          if [[ "$MANUAL_MODE" == "smoke" ]]; then
+            echo "value=signalwatch smoke-test-collectors" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           connector="$MANUAL_CONNECTOR"
           case "$SCHEDULE" in
             "17 * * * *") connector="rss" ;;
@@ -47,11 +60,12 @@ jobs:
             "31 */3 * * *") connector="huggingface" ;;
             "43 */12 * * *") connector="arxiv" ;;
           esac
-          echo "value=$connector" >> "$GITHUB_OUTPUT"
+          test -n "$connector"
+          echo "value=signalwatch collect --connector $connector" >> "$GITHUB_OUTPUT"
       - name: Collect due sources
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           GITHUB_TOKEN: ${{ secrets.SOURCE_GITHUB_TOKEN }}
           HUGGINGFACE_TOKEN: ${{ secrets.HUGGINGFACE_TOKEN }}
-        run: signalwatch collect ${{ steps.connector.outputs.value && format('--connector {0}', steps.connector.outputs.value) || '' }}
+        run: ${{ steps.command.outputs.value }}

@@ -18,6 +18,9 @@ from .base import CollectionResult, conditional_headers
 class RssCollector:
     key = "rss"
 
+    def __init__(self, max_items: int = 100) -> None:
+        self.max_items = max(1, min(max_items, 100))
+
     async def collect(self, source: SourceRecord, client: httpx.AsyncClient) -> CollectionResult:
         response = await client.get(
             validate_public_url(str(source.base_url)), headers=conditional_headers(source), follow_redirects=True
@@ -31,7 +34,7 @@ class RssCollector:
         if parsed.bozo and not parsed.entries:
             raise ValueError(f"invalid feed: {parsed.bozo_exception}")
         items: list[CollectedItem] = []
-        for entry in parsed.entries[:100]:
+        for entry in parsed.entries[: self.max_items]:
             raw_url = entry.get("link") or entry.get("id")
             title = normalize_title(entry.get("title", ""))
             if not raw_url or len(title) < 3:

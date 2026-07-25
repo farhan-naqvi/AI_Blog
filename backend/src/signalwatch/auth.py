@@ -8,16 +8,18 @@ async def require_owner(authorization: str | None = Header(default=None)) -> dic
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="authentication required")
     settings = get_settings()
-    if not settings.supabase_anon_key or not settings.admin_email:
+    if not settings.supabase_anon_key:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="owner auth not configured")
     async with httpx.AsyncClient(timeout=10.0) as client:
         response = await client.get(
-            f"{str(settings.supabase_url).rstrip('/')}/auth/v1/user",
+            f"{str(settings.supabase_url).rstrip('/')}/rest/v1/private_settings",
+            params={"select": "id", "limit": "1"},
             headers={
                 "apikey": settings.supabase_anon_key.get_secret_value(),
                 "authorization": authorization,
             },
         )
-    if response.status_code != 200 or response.json().get("email", "").casefold() != settings.admin_email.casefold():
+    rows = response.json() if response.status_code == 200 else []
+    if not isinstance(rows, list) or len(rows) != 1:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="owner access required")
-    return response.json()
+    return rows[0]

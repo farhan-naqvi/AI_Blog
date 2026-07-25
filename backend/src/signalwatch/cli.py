@@ -5,7 +5,8 @@ from datetime import UTC, datetime
 
 from .collection import CollectionService
 from .collectors import ArxivCollector, GitHubCollector, HuggingFaceCollector, RssCollector
-from .config import get_settings
+from .config import OllamaSettings, get_settings
+from .diagnostics import check_ollama, smoke_test_collectors
 from .llm import OllamaProvider
 from .logging import configure_logging
 from .repository import SupabaseRepository
@@ -14,12 +15,19 @@ from .worker import LocalWorker
 
 
 async def _run(args: argparse.Namespace) -> None:
+    if args.command == "check-ollama":
+        ollama = OllamaSettings()
+        result = await check_ollama(str(ollama.ollama_base_url), ollama.ollama_model)
+        print(json.dumps(result, separators=(",", ":")))
+        return
     settings = get_settings()
     configure_logging(settings.log_level)
     repository = SupabaseRepository(settings)
     provider: OllamaProvider | None = None
     try:
-        if args.command == "collect":
+        if args.command == "smoke-test-collectors":
+            result = await smoke_test_collectors(repository, settings)
+        elif args.command == "collect":
             github_token = settings.github_token.get_secret_value() if settings.github_token else None
             hf_token = settings.huggingface_token.get_secret_value() if settings.huggingface_token else None
             service = CollectionService(
@@ -51,6 +59,18 @@ async def _run(args: argparse.Namespace) -> None:
                         await asyncio.sleep(args.interval)
                 else:
                     result = await worker.run_once(args.batch_size)
+            elif args.command == "e2e-verify":
+                result = await LocalWorker(
+                    repository, provider, settings.local_worker_id
+                ).run_diagnostic_once()
+            elif args.command == "replay-extraction":
+                result = await LocalWorker(
+                    repository, provider, settings.local_worker_id
+                ).replay_extraction_once()
+            elif args.command == "retry-replayed-job":
+                result = await LocalWorker(
+                    repository, provider, settings.local_worker_id
+                ).retry_replayed_job_once()
             else:
                 result = await generate_report(repository, provider, args.report_type)
         print(json.dumps(result, separators=(",", ":")))
@@ -65,6 +85,11 @@ def main() -> None:
     subparsers = parser.add_subparsers(dest="command", required=True)
     collect = subparsers.add_parser("collect")
     collect.add_argument("--connector", choices=("rss", "github", "arxiv", "huggingface"))
+    subparsers.add_parser("smoke-test-collectors")
+    subparsers.add_parser("check-ollama")
+    subparsers.add_parser("e2e-verify")
+    subparsers.add_parser("replay-extraction")
+    subparsers.add_parser("retry-replayed-job")
     worker = subparsers.add_parser("worker")
     worker.add_argument("--batch-size", type=int, default=5)
     worker.add_argument("--watch", action="store_true")

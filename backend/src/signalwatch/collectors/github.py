@@ -10,8 +10,9 @@ from .base import CollectionResult, conditional_headers
 class GitHubCollector:
     key = "github"
 
-    def __init__(self, token: str | None = None) -> None:
+    def __init__(self, token: str | None = None, max_items: int = 25) -> None:
         self.token = token
+        self.max_items = max(1, min(max_items, 100))
 
     async def collect(self, source: SourceRecord, client: httpx.AsyncClient) -> CollectionResult:
         repository = source.connector_config.get("repository")
@@ -22,14 +23,14 @@ class GitHubCollector:
             headers["authorization"] = f"Bearer {self.token}"
         response = await client.get(
             f"https://api.github.com/repos/{repository}/releases",
-            params={"per_page": 25},
+            params={"per_page": self.max_items},
             headers=headers,
         )
         if response.status_code == 304:
             return CollectionResult(not_modified=True)
         response.raise_for_status()
         items: list[CollectedItem] = []
-        for release in response.json():
+        for release in response.json()[: self.max_items]:
             if release.get("draft"):
                 continue
             title = normalize_title(release.get("name") or release.get("tag_name") or "")

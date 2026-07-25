@@ -1,4 +1,5 @@
-from typing import Protocol, TypeVar
+import json
+from typing import Any, Protocol, TypeVar
 
 from pydantic import BaseModel
 
@@ -10,7 +11,29 @@ class ModelUnavailableError(RuntimeError):
 
 
 class StructuredGenerationError(RuntimeError):
-    pass
+    def __init__(
+        self,
+        reason: str,
+        *,
+        errors: list[dict[str, Any]] | None = None,
+        json_valid: bool | None = None,
+        additional_prose: bool = False,
+    ) -> None:
+        self.reason = reason
+        self.errors = errors or []
+        self.json_valid = json_valid
+        self.additional_prose = additional_prose
+        super().__init__(
+            json.dumps(
+                {
+                    "reason": reason,
+                    "errors": self.errors,
+                    "json_valid": json_valid,
+                    "additional_prose": additional_prose,
+                },
+                separators=(",", ":"),
+            )
+        )
 
 
 class LanguageModelProvider(Protocol):

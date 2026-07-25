@@ -55,6 +55,20 @@ class SupabaseRepository:
                 due.append(SourceRecord.model_validate(row))
         return due
 
+    async def smoke_source(self, connector_key: str) -> SourceRecord | None:
+        rows = await self._request(
+            "GET",
+            "sources",
+            params={
+                "select": "*",
+                "active": "eq.true",
+                "connector_key": f"eq.{connector_key}",
+                "order": "name.asc",
+                "limit": "1",
+            },
+        )
+        return SourceRecord.model_validate(rows[0]) if rows else None
+
     async def record_source_result(
         self,
         source_id: str,
@@ -95,9 +109,31 @@ class SupabaseRepository:
             "POST", "rpc/claim_processing_jobs", json={"p_worker": worker_id, "p_batch_size": limit}
         )
 
+    async def replay_job(self) -> dict[str, Any] | None:
+        rows = await self._request(
+            "GET",
+            "processing_jobs",
+            params={
+                "select": "id,source_item_id,status,attempt_count",
+                "status": "eq.Pending",
+                "attempt_count": "gt.0",
+                "order": "attempt_count.desc,created_at.asc",
+                "limit": "1",
+            },
+        )
+        return rows[0] if rows else None
+
+    async def claim_replay_job(self, worker_id: str, job_id: str) -> list[dict[str, Any]]:
+        return await self._request(
+            "POST",
+            "rpc/claim_processing_job_by_id",
+            json={"p_worker": worker_id, "p_job_id": job_id},
+        )
+
     async def complete_job(
         self,
         job_id: str,
+        worker_id: str,
         extracted: ExtractedDevelopment,
         decision: VerificationDecision,
         model_identifier: str,
@@ -108,6 +144,7 @@ class SupabaseRepository:
             "rpc/finalize_processing_job",
             json={
                 "p_job_id": job_id,
+                "p_worker": worker_id,
                 "p_result": extracted.model_dump(mode="json"),
                 "p_decision": decision.model_dump(mode="json"),
                 "p_model_identifier": model_identifier,
@@ -115,11 +152,18 @@ class SupabaseRepository:
             },
         )
 
-    async def fail_job(self, job_id: str, error: str, retryable: bool = True) -> None:
+    async def fail_job(
+        self, job_id: str, worker_id: str, error: str, retryable: bool = True
+    ) -> None:
         await self._request(
             "POST",
             "rpc/fail_processing_job",
-            json={"p_job_id": job_id, "p_error_message": error[:1000], "p_retryable": retryable},
+            json={
+                "p_job_id": job_id,
+                "p_worker": worker_id,
+                "p_error_message": error[:1000],
+                "p_retryable": retryable,
+            },
         )
 
     async def source_items_for_job(self, job: dict[str, Any]) -> list[dict[str, Any]]:
@@ -128,8 +172,15 @@ class SupabaseRepository:
         )
         if rows:
             sources = await self._request(
-                "GET", "sources", params={"select": "is_primary_source", "id": f"eq.{rows[0]['source_id']}"}
+                "GET",
+                "sources",
+                params={
+                    "select": "is_primary_source,source_type,retrieval_method,connector_key",
+                    "id": f"eq.{rows[0]['source_id']}",
+                },
             )
+            if sources:
+                rows[0].update(sources[0])
             rows[0]["is_primary_source"] = bool(sources and sources[0]["is_primary_source"])
         return rows
 

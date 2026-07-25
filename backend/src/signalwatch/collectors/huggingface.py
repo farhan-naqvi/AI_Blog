@@ -10,8 +10,9 @@ from .base import CollectionResult, conditional_headers
 class HuggingFaceCollector:
     key = "huggingface"
 
-    def __init__(self, token: str | None = None) -> None:
+    def __init__(self, token: str | None = None, max_items: int = 40) -> None:
         self.token = token
+        self.max_items = max(1, min(max_items, 100))
 
     async def collect(self, source: SourceRecord, client: httpx.AsyncClient) -> CollectionResult:
         author = source.connector_config.get("author")
@@ -21,7 +22,7 @@ class HuggingFaceCollector:
         params: dict[str, str | int] = {
             "sort": "lastModified",
             "direction": -1,
-            "limit": 40,
+            "limit": self.max_items,
             "full": "false",
         }
         if author:
@@ -31,7 +32,7 @@ class HuggingFaceCollector:
             return CollectionResult(not_modified=True)
         response.raise_for_status()
         items: list[CollectedItem] = []
-        for model in response.json():
+        for model in response.json()[: self.max_items]:
             model_id = model.get("modelId") or model.get("id")
             if not model_id:
                 continue

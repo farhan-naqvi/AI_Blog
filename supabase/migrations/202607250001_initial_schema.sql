@@ -302,7 +302,7 @@ end;
 $$;
 
 create or replace function public.finalize_processing_job(
-  p_job_id uuid, p_result jsonb, p_decision jsonb, p_model_identifier text, p_prompt_version text
+  p_job_id uuid, p_worker text, p_result jsonb, p_decision jsonb, p_model_identifier text, p_prompt_version text
 ) returns jsonb
 language plpgsql
 security definer
@@ -317,7 +317,7 @@ declare
   ref jsonb;
 begin
   select source_item_id into item_id from public.processing_jobs
-    where id = p_job_id and status = 'Claimed' for update;
+    where id = p_job_id and status = 'Claimed' and claimed_by = left(p_worker, 120) for update;
   if item_id is null then raise exception 'job is not currently claimed'; end if;
   select s.is_primary_source into source_primary from public.source_items si join public.sources s on s.id = si.source_id where si.id = item_id;
   slug_value := trim(both '-' from regexp_replace(lower(p_result->>'headline'), '[^a-z0-9]+', '-', 'g')) || '-' || left(new_development_id::text, 8);
@@ -357,17 +357,19 @@ begin
 end;
 $$;
 
-create or replace function public.fail_processing_job(p_job_id uuid, p_error_message text, p_retryable boolean default true)
+create or replace function public.fail_processing_job(p_job_id uuid, p_worker text, p_error_message text, p_retryable boolean default true)
 returns void language plpgsql security definer set search_path = public as $$
 declare attempts integer;
 begin
-  select attempt_count into attempts from public.processing_jobs where id = p_job_id for update;
+  select attempt_count into attempts from public.processing_jobs
+    where id = p_job_id and status = 'Claimed' and claimed_by = left(p_worker, 120) for update;
+  if attempts is null then raise exception 'job is not claimed by this worker'; end if;
   update public.processing_jobs set
     status = case when p_retryable and attempts < 3 then 'Pending' when attempts >= 3 then 'Dead' else 'Failed' end,
     available_at = case when p_retryable and attempts < 3 then now() + make_interval(mins => (2 ^ attempts)::integer) else available_at end,
     claimed_by = null, claimed_at = null, last_error = left(p_error_message, 1000),
     expires_at = case when attempts >= 3 or not p_retryable then now() + interval '14 days' else expires_at end
-  where id = p_job_id;
+  where id = p_job_id and status = 'Claimed' and claimed_by = left(p_worker, 120);
 end;
 $$;
 
@@ -375,6 +377,7 @@ create or replace function public.create_linkedin_draft(p_development_id uuid, p
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare new_id uuid; ttl integer;
 begin
+  perform pg_advisory_xact_lock(hashtext('signalwatch-linkedin-draft-daily'));
   if exists (select 1 from public.linkedin_drafts where created_at >= date_trunc('day', now())) then
     return jsonb_build_object('created', false, 'reason', 'daily_limit');
   end if;
@@ -395,7 +398,7 @@ begin
   if exists (select 1 from public.reports r where r.report_type = p_report_type and r.created_at >= case when p_report_type = 'Daily' then date_trunc('day', now()) else date_trunc('week', now()) end) then
     return jsonb_build_object('created', false, 'reason', 'period_already_exists');
   end if;
-  if jsonb_array_length(p_report->'development_ids') < case when p_report_type = 'Daily' then 3 else 5 end then
+  if jsonb_array_length(p_report->'development_ids') < (case when p_report_type = 'Daily' then 3 else 5 end) then
     raise exception 'insufficient evidence for report';
   end if;
   insert into public.reports (report_type, title, summary, body, development_ids, period_start, period_end,
@@ -502,7 +505,7 @@ alter table public.reports enable row level security;
 alter table public.daily_metrics enable row level security;
 alter table public.operational_logs enable row level security;
 
-create policy "public reads active sources" on public.sources for select using (active);
+create policy "public reads active sources" on public.sources for select to anon using (active);
 create policy "owner manages sources" on public.sources for all using (public.is_owner()) with check (public.is_owner());
 create policy "public reads published developments" on public.developments for select using (publication_status = 'Published' and verification_status = 'Verified');
 create policy "owner manages developments" on public.developments for all using (public.is_owner()) with check (public.is_owner());
@@ -525,15 +528,17 @@ create policy "owner only linkedin drafts" on public.linkedin_drafts for all usi
 create policy "owner only metrics" on public.daily_metrics for all using (public.is_owner()) with check (public.is_owner());
 create policy "owner only logs" on public.operational_logs for all using (public.is_owner()) with check (public.is_owner());
 
-revoke all on public.private_settings, public.processing_jobs, public.exceptions, public.linkedin_drafts, public.daily_metrics, public.operational_logs from anon;
-grant select on public.sources, public.source_items, public.developments, public.development_sources, public.reports to anon, authenticated;
+revoke all on public.private_settings, public.sources, public.processing_jobs, public.exceptions, public.linkedin_drafts, public.daily_metrics, public.operational_logs from anon;
+grant select (id, name, base_url, source_type, retrieval_method, is_primary_source, reliability_level, poll_interval_minutes, active, last_success_at)
+  on public.sources to anon;
+grant select on public.source_items, public.developments, public.development_sources, public.reports to anon;
 grant all on public.private_settings, public.sources, public.source_items, public.developments, public.development_sources, public.processing_jobs, public.exceptions, public.linkedin_drafts, public.reports, public.daily_metrics, public.operational_logs to authenticated;
 grant all on all tables in schema public to service_role;
 grant usage, select on all sequences in schema public to service_role;
 revoke all on function public.ingest_source_item(jsonb) from public, anon, authenticated;
 revoke all on function public.claim_processing_jobs(text, integer) from public, anon, authenticated;
-revoke all on function public.finalize_processing_job(uuid, jsonb, jsonb, text, text) from public, anon, authenticated;
-revoke all on function public.fail_processing_job(uuid, text, boolean) from public, anon, authenticated;
+revoke all on function public.finalize_processing_job(uuid, text, jsonb, jsonb, text, text) from public, anon, authenticated;
+revoke all on function public.fail_processing_job(uuid, text, text, boolean) from public, anon, authenticated;
 revoke all on function public.create_linkedin_draft(uuid, jsonb) from public, anon, authenticated;
 revoke all on function public.create_verified_report(text, jsonb, timestamptz, timestamptz, text, text) from public, anon, authenticated;
 revoke all on function public.cleanup_expired_data() from public, anon, authenticated;
@@ -541,8 +546,8 @@ revoke all on function public.aggregate_daily_metrics(date) from public, anon, a
 revoke all on function public.system_health_snapshot() from public, anon;
 grant execute on function public.ingest_source_item(jsonb) to service_role;
 grant execute on function public.claim_processing_jobs(text, integer) to service_role;
-grant execute on function public.finalize_processing_job(uuid, jsonb, jsonb, text, text) to service_role;
-grant execute on function public.fail_processing_job(uuid, text, boolean) to service_role;
+grant execute on function public.finalize_processing_job(uuid, text, jsonb, jsonb, text, text) to service_role;
+grant execute on function public.fail_processing_job(uuid, text, text, boolean) to service_role;
 grant execute on function public.create_linkedin_draft(uuid, jsonb) to service_role;
 grant execute on function public.create_verified_report(text, jsonb, timestamptz, timestamptz, text, text) to service_role;
 grant execute on function public.cleanup_expired_data() to service_role;
