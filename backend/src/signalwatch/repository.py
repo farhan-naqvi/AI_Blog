@@ -230,9 +230,9 @@ class SupabaseRepository:
             "GET",
             "developments",
             params={
-                "select": "id,headline,summary,category,importance_label,published_at,why_it_matters,what_changed,limitations,confirmed_claims,reported_claims",
+                "select": "id,headline,summary,category,importance_label,verification_status,published_at,why_it_matters,what_changed,limitations,confirmed_claims,reported_claims",
                 "publication_status": "eq.Published",
-                "verification_status": "eq.Verified",
+                "verification_status": "in.(Verified,Reported)",
                 "published_at": f"gte.{since.isoformat()}",
                 "order": "published_at.desc",
                 "limit": str(limit),

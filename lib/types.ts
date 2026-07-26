@@ -14,7 +14,7 @@ export type Development = {
   category: string;
   importance_label: "Major" | "Notable" | "Incremental";
   confidence_label: "High" | "Medium" | "Low";
-  verification_status: "Verified" | "Developing" | "Held";
+  verification_status: "Verified" | "Reported" | "Developing";
   publication_status: "Published" | "Held" | "Rejected";
   published_at: string | null;
   confirmed_claims: string[];
@@ -27,7 +27,7 @@ export type Development = {
 export type Report = {
   id: string;
   report_type: "Daily" | "Weekly" | "Topic";
-  report_level: "Briefing" | "Monitoring digest";
+  report_level: "Briefing" | "Monitoring digest" | "Activity summary";
   title: string;
   summary: string;
   body: string;
@@ -52,7 +52,11 @@ export type PublicPlatformStats = {
   developments_analysed: number;
   published_development_count: number;
   verified_public_development_count: number;
+  reported_public_development_count: number;
+  developing_private_development_count: number;
+  major_verified_public_count: number;
   major_notable_public_count: number;
+  incremental_public_count: number;
   incremental_verified_update_count: number;
   internally_held_count: number;
   last_successful_collection_at: string | null;

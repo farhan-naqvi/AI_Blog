@@ -65,14 +65,24 @@ def report_prompt(report_type: str, developments: list[dict[str, Any]]) -> str:
     compact = [
         {
             key: row.get(key)
-            for key in ("id", "headline", "summary", "category", "importance_label", "published_at")
+            for key in (
+                "id",
+                "headline",
+                "summary",
+                "category",
+                "importance_label",
+                "verification_status",
+                "published_at",
+            )
         }
         for row in developments
     ]
     report_name = report_type if "Briefing" in report_type else f"{report_type} intelligence report"
     return (
-        f"Create a {report_name} using only these published verified "
-        "developments. Include patterns, what changed, and what to watch next. Every development_id "
-        "must come from the supplied IDs. Do not add unsupported facts.\n"
+        f"Create a {report_name} using only these public developments. Verified items may form the "
+        "main analysis. If Reported items are included, place them in a clearly labelled secondary "
+        "section and never describe their claims as independently verified. Include patterns, what "
+        "changed, and what to watch next. Every development_id must come from the supplied IDs. Do "
+        "not add unsupported facts.\n"
         + json.dumps(compact, ensure_ascii=False, separators=(",", ":"))
     )

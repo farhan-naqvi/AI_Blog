@@ -20,10 +20,10 @@ export async function generateMetadata(): Promise<Metadata> {
   const image = `${protocol}://${host}/og.png`;
   return {
     title: { default: "SignalWatch AI", template: "%s · SignalWatch AI" },
-    description: "Verified intelligence on meaningful AI developments, sourced from primary evidence.",
+    description: "Reliably sourced AI developments with verified facts and clearly labelled reported claims.",
     icons: { icon: "/favicon.svg", shortcut: "/favicon.svg" },
-    openGraph: { title: "SignalWatch AI", description: "What changed in AI. Verified, not amplified.", images: [{ url: image, width: 1736, height: 907 }] },
-    twitter: { card: "summary_large_image", title: "SignalWatch AI", description: "What changed in AI. Verified, not amplified.", images: [image] },
+    openGraph: { title: "SignalWatch AI", description: "What changed in AI. Grounded, not amplified.", images: [{ url: image, width: 1736, height: 907 }] },
+    twitter: { card: "summary_large_image", title: "SignalWatch AI", description: "What changed in AI. Grounded, not amplified.", images: [image] },
   };
 }
 

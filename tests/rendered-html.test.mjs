@@ -18,14 +18,16 @@ test("server-renders the public intelligence overview", async () => {
   assert.equal(response.status, 200);
   const html = await response.text();
   assert.match(html, /<title>SignalWatch AI<\/title>/i);
-  assert.match(html, /Verified, not amplified/i);
+  assert.match(html, /Grounded, not amplified/i);
   assert.match(html, /PRIMARY-SOURCE AI INTELLIGENCE/i);
   assert.match(html, /Sources monitored/i);
   assert.match(html, /Items detected/i);
   assert.match(html, /Developments analysed/i);
   assert.match(html, /Verified public/i);
+  assert.match(html, /Reported public/i);
+  assert.match(html, /Developing\/private/i);
   assert.match(html, /Major or notable/i);
-  assert.match(html, /Verified updates/i);
+  assert.match(html, /Incremental/i);
   assert.doesNotMatch(html, /codex-preview|react-loading-skeleton|Starter Project/i);
 });
 
@@ -42,30 +44,41 @@ test("public records are uncached and detail separates factual from reported cla
   const detail = await readFile(new URL("../app/developments/[slug]/page.tsx", import.meta.url), "utf8");
   assert.match(publicData, /cache:\s*"no-store"/);
   assert.doesNotMatch(publicData, /revalidate:\s*60/);
-  assert.match(detail, /Confirmed source facts/);
+  assert.match(detail, /Confirmed facts/);
   assert.match(detail, /Source-reported claims/);
-  assert.match(detail, /not presented as independently verified/i);
+  assert.match(detail, /have not necessarily been independently verified/i);
+  assert.doesNotMatch(detail, /reported_claims\.map\(.*confirmed_claims/s);
 });
 
-test("latest feed exposes importance filters and accurate incremental labels", async () => {
+test("latest feed exposes evidence, importance, and category filters", async () => {
   const response = await render("/latest");
   assert.equal(response.status, 200);
   const html = await response.text();
-  assert.match(html, /All verified/i);
+  assert.match(html, /All public updates/i);
+  assert.match(html, /Verified only/i);
+  assert.match(html, /Reported only/i);
   assert.match(html, /Major/i);
   assert.match(html, /Notable/i);
   assert.match(html, /Incremental/i);
+  assert.match(html, /Agents and developer tools/i);
+  assert.match(html, /Policy, safety and security/i);
   const card = await readFile(new URL("../components/DevelopmentCard.tsx", import.meta.url), "utf8");
-  assert.match(card, /Verified update/);
+  const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+  assert.match(card, /verification_status/);
+  assert.match(card, /evidence-\$\{item\.verification_status\.toLowerCase\(\)\}/);
+  assert.match(css, /evidence-reported/);
   assert.match(card, /confirmed facts/);
   assert.match(card, /source-reported claims/);
+  const publicData = await readFile(new URL("../lib/public-data.ts", import.meta.url), "utf8");
+  assert.match(publicData, /count >= 5/);
 });
 
 test("daily page distinguishes a monitoring digest from a briefing", async () => {
   const briefing = await readFile(new URL("../app/briefing/page.tsx", import.meta.url), "utf8");
   assert.match(briefing, /Daily Monitoring Digest/);
   assert.match(briefing, /Daily Intelligence Briefing/);
-  assert.match(briefing, /Insufficient verified activity/);
+  assert.match(briefing, /Daily Activity Summary/);
+  assert.match(briefing, /zero public developments/);
 });
 
 test("server-renders the owner sign-in without private data", async () => {

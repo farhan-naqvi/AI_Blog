@@ -25,7 +25,13 @@ def verify_development(
         for ref in extracted.evidence
     )
     sensitive_text = " ".join(
-        [extracted.event_type, extracted.category, extracted.headline, *extracted.confirmed_claims]
+        [
+            extracted.event_type,
+            extracted.category,
+            extracted.headline,
+            *extracted.confirmed_claims,
+            *extracted.reported_claims,
+        ]
     ).casefold()
     sensitive = extracted.event_type is EventType.SECURITY or any(
         term in sensitive_text for term in SENSITIVE_TERMS
@@ -42,13 +48,13 @@ def verify_development(
         reasons.append("possible semantic duplicate is unresolved")
     if sensitive or contradictory or unresolved_duplicate:
         return VerificationDecision(
-            verification_status="Held",
+            verification_status="Developing",
             confidence_label="Low" if contradictory else "Medium",
             publication_status="Held",
             reasons=reasons,
             exception_type="Sensitive" if sensitive else "Evidence conflict",
         )
-    if not strong_primary or not extracted.confirmed_claims:
+    if not strong_primary:
         return VerificationDecision(
             verification_status="Developing",
             confidence_label="Low",
@@ -56,9 +62,26 @@ def verify_development(
             reasons=reasons,
             exception_type="Insufficient evidence",
         )
+    if extracted.confirmed_claims:
+        return VerificationDecision(
+            verification_status="Verified",
+            confidence_label="High",
+            publication_status="Published",
+            reasons=["strong primary evidence, confirmed facts, and complete processing"],
+        )
+    if extracted.reported_claims:
+        return VerificationDecision(
+            verification_status="Reported",
+            confidence_label="Medium",
+            publication_status="Published",
+            reasons=[
+                "first-party evidence identifies the event; material claims remain source-reported"
+            ],
+        )
     return VerificationDecision(
-        verification_status="Verified",
-        confidence_label="High",
-        publication_status="Published",
-        reasons=["strong primary evidence, confirmed claims, and complete processing"],
+        verification_status="Developing",
+        confidence_label="Low",
+        publication_status="Held",
+        reasons=["primary evidence exists but extraction produced no grounded factual or reported claims"],
+        exception_type="Insufficient evidence",
     )

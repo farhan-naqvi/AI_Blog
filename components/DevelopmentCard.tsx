@@ -6,7 +6,9 @@ function date(value: string | null) {
 }
 
 export function DevelopmentCard({ item, rank }: { item: Development; rank?: number }) {
-  const publicLabel = item.importance_label === "Incremental" ? "Verified update" : `${item.importance_label} development`;
+  const publicLabel = item.importance_label === "Incremental"
+    ? `${item.verification_status} update`
+    : `${item.importance_label} ${item.verification_status.toLowerCase()} ${item.verification_status === "Verified" ? "development" : "announcement"}`;
   return (
     <article className="development-card">
       {rank ? <span className="rank">{String(rank).padStart(2, "0")}</span> : null}
@@ -14,7 +16,7 @@ export function DevelopmentCard({ item, rank }: { item: Development; rank?: numb
         <div className="eyebrow"><span className={`importance ${item.importance_label.toLowerCase()}`}>{publicLabel}</span><span>{item.importance_label}</span><span>{item.category}</span><time>{date(item.published_at)}</time></div>
         <h3><Link href={`/developments/${item.slug}`}>{item.headline}</Link></h3>
         <p>{item.summary}</p>
-        <div className="evidence-line"><span className="verified-dot" /> Verified · {item.confidence_label} confidence</div>
+        <div className={`evidence-line evidence-${item.verification_status.toLowerCase()}`}><span className="evidence-dot" /> {item.verification_status} · {item.confidence_label} confidence</div>
         <div className="card-facts">
           {item.primary_source_url ? <a href={item.primary_source_url} target="_blank" rel="noreferrer">Primary: {item.primary_source_title}</a> : null}
           <span>{item.confirmed_claims.length} confirmed facts · {item.reported_claims.length} source-reported claims</span>

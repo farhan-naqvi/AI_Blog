@@ -292,7 +292,7 @@ class ExtractedDevelopment(BaseModel):
 
 
 class VerificationDecision(BaseModel):
-    verification_status: Literal["Verified", "Developing", "Held"]
+    verification_status: Literal["Verified", "Reported", "Developing"]
     confidence_label: Literal["High", "Medium", "Low"]
     publication_status: Literal["Published", "Held", "Rejected"]
     reasons: list[str] = Field(min_length=1, max_length=10)
@@ -308,4 +308,4 @@ class ReportOutput(BaseModel):
     title: str = Field(min_length=8, max_length=200)
     summary: str = Field(min_length=40, max_length=1200)
     body: str = Field(min_length=100, max_length=12000)
-    development_ids: list[str] = Field(min_length=3, max_length=20)
+    development_ids: list[str] = Field(min_length=1, max_length=20)

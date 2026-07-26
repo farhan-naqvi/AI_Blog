@@ -19,6 +19,12 @@ VISIBILITY_MIGRATION = (
     / "migrations"
     / "202607260002_visibility_and_digests.sql"
 ).read_text(encoding="utf-8")
+REPORTED_VISIBILITY_MIGRATION = (
+    Path(__file__).parents[2]
+    / "supabase"
+    / "migrations"
+    / "202607260003_reported_visibility.sql"
+).read_text(encoding="utf-8")
 
 
 def test_atomic_job_claim_uses_skip_locked() -> None:
@@ -151,3 +157,33 @@ def test_daily_report_levels_have_distinct_thresholds() -> None:
     assert "daily briefing requires three major or notable developments" in lowered
     assert "daily monitoring digest requires three verified public developments" in lowered
     assert "report_level in ('briefing', 'monitoring digest')" in lowered
+
+
+def test_reported_visibility_uses_three_deterministic_evidence_statuses() -> None:
+    lowered = REPORTED_VISIBILITY_MIGRATION.lower()
+    assert "verification_status in ('verified', 'reported', 'developing')" in lowered
+    assert "eligible_verified" in lowered
+    assert "eligible_reported" in lowered
+    assert "missing_primary_source" in lowered
+    assert "extraction_failure" in lowered
+    assert "importance_label" not in lowered.split(
+        "function public.development_evidence_classification", 1
+    )[1].split("$$;", 1)[0]
+
+
+def test_reported_recalculation_is_service_only_and_idempotent() -> None:
+    lowered = REPORTED_VISIBILITY_MIGRATION.lower()
+    assert "recalculate_public_visibility(p_dry_run boolean default true)" in lowered
+    assert "eligible_as_verified_public" in lowered
+    assert "eligible_as_reported_public" in lowered
+    assert "verification_status_updates" in lowered
+    assert "grant execute on function public.recalculate_public_visibility(boolean) to service_role" in lowered
+
+
+def test_reported_stats_and_report_thresholds_are_separated() -> None:
+    lowered = REPORTED_VISIBILITY_MIGRATION.lower()
+    assert "reported_public_development_count" in lowered
+    assert "developing_private_development_count" in lowered
+    assert "daily briefing requires three verified major or notable developments" in lowered
+    assert "daily monitoring digest requires three public developments" in lowered
+    assert "daily activity summary requires one or two public developments" in lowered

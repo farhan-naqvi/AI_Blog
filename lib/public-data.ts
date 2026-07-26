@@ -47,23 +47,61 @@ async function publicRpcObject<T>(name: string): Promise<T | null> {
   }
 }
 
-const importanceRank = { Major: 1, Notable: 2, Incremental: 3 } as const;
+const importanceRank = { Major: 0, Notable: 1, Incremental: 2 } as const;
+const evidenceRank = { Verified: 0, Reported: 1, Developing: 2 } as const;
+
+export const publicCategoryGroups = [
+  "Models",
+  "Agents and developer tools",
+  "Research and AI science",
+  "Infrastructure and hardware",
+  "Business and products",
+  "Policy, safety and security",
+] as const;
+
+export type PublicCategoryGroup = (typeof publicCategoryGroups)[number];
+export type DevelopmentFilters = {
+  status?: "Verified" | "Reported";
+  importance?: Development["importance_label"];
+  category?: PublicCategoryGroup;
+};
+
+function matchesCategory(item: Development, group: PublicCategoryGroup): boolean {
+  if (group === "Models") return item.category === "Models";
+  if (group === "Agents and developer tools") return ["Agents", "Developer tools"].includes(item.category);
+  if (group === "Research and AI science") return ["Research", "Robotics"].includes(item.category);
+  if (group === "Infrastructure and hardware") return item.category === "Infrastructure";
+  if (group === "Business and products") return ["Partnership", "Funding"].includes(item.event_type) || item.category === "Other";
+  return ["Regulation", "Security"].includes(item.category);
+}
 
 export async function getDevelopments(
   limit = 20,
-  importance?: Development["importance_label"],
+  filters: DevelopmentFilters = {},
 ): Promise<Development[]> {
-  const filter = importance ? `&importance_label=eq.${importance}` : "";
   const boundedLimit = Math.max(1, Math.min(limit, 200));
-  const rows = await publicQuery<Development>(
-    `developments?select=*&publication_status=eq.Published&verification_status=eq.Verified${filter}&limit=200`,
+  let rows = await publicQuery<Development>(
+    "developments?select=*&publication_status=eq.Published&verification_status=in.(Verified,Reported)&limit=200",
+  );
+  rows = rows.filter((row) =>
+    (!filters.status || row.verification_status === filters.status)
+    && (!filters.importance || row.importance_label === filters.importance)
+    && (!filters.category || matchesCategory(row, filters.category))
   );
   rows.sort((left, right) => {
-    const difference = importanceRank[left.importance_label] - importanceRank[right.importance_label];
+    const leftRank = importanceRank[left.importance_label] * 2 + evidenceRank[left.verification_status];
+    const rightRank = importanceRank[right.importance_label] * 2 + evidenceRank[right.verification_status];
+    const difference = leftRank - rightRank;
     if (difference) return difference;
     return new Date(right.published_at ?? 0).getTime() - new Date(left.published_at ?? 0).getTime();
   });
-  const selected = rows.slice(0, boundedLimit);
+  const categoryCounts = new Map<string, number>();
+  const selected = rows.filter((row) => {
+    const count = categoryCounts.get(row.category) ?? 0;
+    if (count >= 5) return false;
+    categoryCounts.set(row.category, count + 1);
+    return true;
+  }).slice(0, boundedLimit);
   if (!selected.length) return selected;
   const ids = selected.map((row) => row.id).join(",");
   const evidence = await publicQuery<{
@@ -85,7 +123,7 @@ export async function getDevelopments(
 
 export async function getDevelopment(slug: string): Promise<Development | null> {
   const rows = await publicQuery<Development>(
-    `developments?select=*&slug=eq.${encodeURIComponent(slug)}&publication_status=eq.Published&verification_status=eq.Verified&limit=1`,
+    `developments?select=*&slug=eq.${encodeURIComponent(slug)}&publication_status=eq.Published&verification_status=in.(Verified,Reported)&limit=1`,
   );
   return rows[0] ?? null;
 }
@@ -112,7 +150,7 @@ export function searchDevelopments(query: string): Promise<Development[]> {
 }
 
 export function getRelatedDevelopments(item: Development): Promise<Development[]> {
-  return publicQuery<Development>(`developments?select=*&publication_status=eq.Published&verification_status=eq.Verified&category=eq.${encodeURIComponent(item.category)}&id=neq.${item.id}&order=published_at.desc&limit=3`);
+  return publicQuery<Development>(`developments?select=*&publication_status=eq.Published&verification_status=in.(Verified,Reported)&category=eq.${encodeURIComponent(item.category)}&id=neq.${item.id}&order=published_at.desc&limit=3`);
 }
 
 export async function getDevelopmentSources(developmentId: string) {
