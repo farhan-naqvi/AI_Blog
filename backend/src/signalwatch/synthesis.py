@@ -1,10 +1,26 @@
 from datetime import UTC, datetime, timedelta
+import re
 
 from .llm import LanguageModelProvider
 from .coverage import development_category
 from .models import ReportOutput
 from .prompts import report_prompt
 from .repository import SupabaseRepository
+
+_ROUTINE_RELEASE = re.compile(
+    r"\b(bug fixes?|documentation updates?|dependency updates?|maintenance|code refactor(?:ing)?|"
+    r"code quality improvements?|housekeeping)\b",
+    re.I,
+)
+_CONCRETE_CHANGE = re.compile(
+    r"\b(introduces?|adds?|enables?|supports?|launches?|removes?|changes?|makes available|open-sources?)\b",
+    re.I,
+)
+_REPOSITORY_RELEASE = re.compile(r"^([^/\s]+)/([^:]+):\s*(\S.+)$")
+_PRERELEASE = re.compile(
+    r"(?:alpha|beta|rc|preview|dev|nightly)|^\d+(?:\.\d+)+(?:a|b|rc)\d+$",
+    re.I,
+)
 
 REPORT_PROMPT_VERSION = "report-v1"
 DIGEST_TEMPLATE_VERSION = "daily-digest-v2"
@@ -25,13 +41,42 @@ def _public_rank(row: dict) -> tuple[int, float]:
     return order.get((row.get("verification_status"), row.get("importance_label")), 6), -timestamp
 
 
+def _reader_value_candidate(row: dict) -> bool:
+    if row.get("importance_label") != "Incremental" or row.get("event_type") != "Release":
+        return True
+    release = _REPOSITORY_RELEASE.match(str(row.get("headline") or ""))
+    if release and _PRERELEASE.search(release.group(3)):
+        return False
+    summary = str(row.get("summary") or "")
+    return not (_ROUTINE_RELEASE.search(summary) and not _CONCRETE_CHANGE.search(summary))
+
+
+def _development_subject(row: dict) -> str:
+    if row.get("product"):
+        return f"product:{str(row['product']).strip().casefold()}"
+    release = _REPOSITORY_RELEASE.match(str(row.get("headline") or ""))
+    if release:
+        return f"repository:{release.group(1).casefold()}/{release.group(2).casefold()}"
+    if row.get("organisation"):
+        return f"organisation:{str(row['organisation']).strip().casefold()}"
+    return f"development:{row.get('id')}"
+
+
 def _limit_per_category(rows: list[dict], limit: int = 5) -> list[dict]:
     selected: list[dict] = []
     category_counts: dict[str, int] = {}
+    category_subjects: dict[str, set[str]] = {}
     for row in sorted(rows, key=_public_rank):
+        if not _reader_value_candidate(row):
+            continue
         category = development_category(row)
         if category_counts.get(category, 0) >= limit:
             continue
+        subject = _development_subject(row)
+        seen = category_subjects.setdefault(category, set())
+        if subject in seen:
+            continue
+        seen.add(subject)
         category_counts[category] = category_counts.get(category, 0) + 1
         selected.append(row)
     return selected

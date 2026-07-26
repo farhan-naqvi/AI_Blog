@@ -44,7 +44,10 @@ def compose_development(
         product=factual.product,
         release_date=factual.release_date,
         category=factual.category,
-        headline=" ".join(str(item["title"]).split())[:240].rstrip(),
+        headline=(
+            analysis.reader_headline
+            or " ".join(str(item["title"]).split())[:240].rstrip()
+        ),
         confirmed_claims=factual.confirmed_claims,
         reported_claims=factual.reported_claims,
         limitations=factual.limitations,

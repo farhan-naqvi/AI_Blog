@@ -165,13 +165,14 @@ class DevelopmentAnalysis(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     why_it_matters: str = Field(min_length=20, max_length=900)
+    reader_headline: str | None = Field(default=None, min_length=8, max_length=140)
     what_changed: str | None = Field(default=None, max_length=900)
     affected_groups: list[ShortText] = Field(default_factory=list, max_length=8)
     watch_next: list[ShortText] = Field(default_factory=list, max_length=8)
     importance_label: Literal["Major", "Notable", "Incremental"] = "Incremental"
     importance_reasons: list[ShortText] = Field(default_factory=list, max_length=6)
 
-    @field_validator("what_changed", mode="before")
+    @field_validator("reader_headline", "what_changed", mode="before")
     @classmethod
     def normalize_optional_change(cls, value: Any) -> Any:
         return _optional_text(value)

@@ -141,3 +141,43 @@ def test_digest_orders_evidence_then_importance_and_limits_public_groups() -> No
     selected = _limit_per_category(developments)
     assert len(selected) == 5
     assert [row["id"] for row in selected[:2]] == ["verified-major", "reported-major"]
+
+
+def test_digest_drops_routine_patch_releases_and_diversifies_products() -> None:
+    developments = [
+        {
+            "id": "routine",
+            "headline": "crewAIInc/crewAI: 1.15.7",
+            "summary": "Release notes including bug fixes and documentation updates.",
+            "product": "crewAI",
+            "category": "Developer tools",
+            "event_type": "Release",
+            "verification_status": "Verified",
+            "importance_label": "Incremental",
+            "published_at": "2026-07-27T00:00:00Z",
+        },
+        {
+            "id": "concrete-latest",
+            "headline": "crewAIInc/crewAI: 1.16.0",
+            "summary": "The release introduces bounded event replay for agent workflows.",
+            "product": "crewAI",
+            "category": "Developer tools",
+            "event_type": "Release",
+            "verification_status": "Verified",
+            "importance_label": "Incremental",
+            "published_at": "2026-07-26T00:00:00Z",
+        },
+        {
+            "id": "same-product-older",
+            "headline": "crewAIInc/crewAI: 1.15.0",
+            "summary": "The release adds another documented workflow capability.",
+            "product": "crewAI",
+            "category": "Developer tools",
+            "event_type": "Release",
+            "verification_status": "Verified",
+            "importance_label": "Incremental",
+            "published_at": "2026-07-25T00:00:00Z",
+        },
+    ]
+    selected = _limit_per_category(developments)
+    assert [row["id"] for row in selected] == ["concrete-latest"]

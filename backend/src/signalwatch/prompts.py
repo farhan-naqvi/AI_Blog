@@ -3,7 +3,7 @@ from typing import Any
 
 from .models import FactualExtraction
 
-PROMPT_VERSION = "development-v4"
+PROMPT_VERSION = "development-v5"
 
 
 def factual_extraction_prompt(source_items: list[dict[str, Any]], readable_text: str) -> str:
@@ -38,7 +38,13 @@ def development_analysis_prompt(
 ) -> str:
     return (
         "Analyze only the validated factual extraction below. Do not repeat or change factual "
-        "claims. Explain why it matters conservatively. No previous-version evidence was supplied, "
+        "claims. Explain why it matters conservatively. Create reader_headline only when the facts "
+        "identify a concrete change: name the product and the change in plain language, stay under "
+        "110 characters, and avoid tag-only titles, clickbait, hype, or unsupported adjectives. "
+        "Return null for reader_headline when the source supports only routine maintenance or does "
+        "not identify a concrete reader-relevant change. Do not call an update critical, major, "
+        "significant, or transformative unless the validated facts directly support that impact. "
+        "No previous-version evidence was supplied, "
         "so return null for what_changed. Return empty arrays when affected groups or watch items "
         "are unsupported. Classify importance conservatively using the bounded release signals when "
         "provided; a major-version signal alone must not imply Major. Do not invent facts. Output only "

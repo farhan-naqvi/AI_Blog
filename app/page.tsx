@@ -8,6 +8,8 @@ import {
   getPublicPlatformStats,
   getReports,
   publicCategoryGroups,
+  readerFacingHeadline,
+  selectReaderValueDevelopments,
 } from "@/lib/public-data";
 
 function reportLabel(level: "Briefing" | "Monitoring digest" | "Activity summary" | undefined) {
@@ -24,8 +26,12 @@ export default async function OverviewPage() {
   ]);
   const grouped = publicCategoryGroups.map((category) => ({
     category,
-    items: developments.filter((item) => developmentPublicCategory(item) === category).slice(0, 5),
+    items: selectReaderValueDevelopments(
+      developments.filter((item) => developmentPublicCategory(item) === category),
+      5,
+    ),
   }));
+  const featuredDevelopments = selectReaderValueDevelopments(developments, 4);
   const publicCount = stats?.published_development_count ?? 0;
   const noMajorVerified = publicCount > 0 && (stats?.major_verified_public_count ?? 0) === 0;
 
@@ -56,7 +62,7 @@ export default async function OverviewPage() {
             <section className="category-panel" key={category}>
               <div className="category-panel-head"><h3>{category}</h3><Link href={`/latest?category=${encodeURIComponent(category)}`}>View all</Link></div>
               {items.length
-                ? items.map((item, index) => <DevelopmentCard key={item.id} item={item} rank={index + 1} />)
+                ? items.map((item, index) => <DevelopmentCard key={item.id} item={item} rank={index + 1} headline={readerFacingHeadline(item)} />)
                 : <EmptyState title="No public developments yet" detail="Monitoring is active; no item in this category currently meets the public evidence policy." />}
             </section>
           ))}
@@ -66,7 +72,7 @@ export default async function OverviewPage() {
         <div>
           <div className="section-heading"><div><span className="section-index">01</span><h2>Latest public developments</h2></div><Link href="/latest">View all →</Link></div>
           {noMajorVerified ? <p className="monitoring-note">Monitoring is active. Reliably sourced updates are available, while no major verified development has been identified today.</p> : null}
-          <div className="development-list">{developments.length ? developments.slice(0, 4).map((item, index) => <DevelopmentCard key={item.id} item={item} rank={index + 1} />) : <EmptyState title="Monitoring is active" detail="No development currently meets the public evidence policy." />}</div>
+          <div className="development-list">{featuredDevelopments.length ? featuredDevelopments.map((item, index) => <DevelopmentCard key={item.id} item={item} rank={index + 1} headline={readerFacingHeadline(item)} />) : <EmptyState title="Monitoring is active" detail="No development currently combines sufficient evidence with a distinct reader-relevant change." />}</div>
         </div>
         <aside className="brief-panel">
           <div className="panel-label">{reportLabel(reports[0]?.report_level)}</div>

@@ -70,7 +70,8 @@ test("latest feed exposes evidence, importance, and category filters", async () 
   assert.match(card, /confirmed facts/);
   assert.match(card, /source-reported claims/);
   const publicData = await readFile(new URL("../lib/public-data.ts", import.meta.url), "utf8");
-  assert.match(publicData, /count >= 5/);
+  assert.match(publicData, /selectReaderValueDevelopments/);
+  assert.match(publicData, /routineReleaseTerms/);
 });
 
 test("daily page distinguishes a monitoring digest from a briefing", async () => {
@@ -89,7 +90,8 @@ test("overview renders six category sections without requiring five items", asyn
   }
   assert.match(html, /View all/i);
   const publicData = await readFile(new URL("../lib/public-data.ts", import.meta.url), "utf8");
-  assert.match(publicData, /count >= 5/);
+  assert.match(publicData, /seenSubjects/);
+  assert.match(publicData, /readerFacingHeadline/);
   assert.doesNotMatch(publicData, /count === 5/);
 });
 

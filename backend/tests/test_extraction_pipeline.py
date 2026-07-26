@@ -5,7 +5,7 @@ from pydantic import ValidationError
 
 from signalwatch.extraction import compose_development
 from signalwatch.models import Category, DevelopmentAnalysis, EventType, FactualExtraction
-from signalwatch.prompts import factual_extraction_prompt
+from signalwatch.prompts import development_analysis_prompt, factual_extraction_prompt
 from signalwatch.release_metadata import apply_release_importance, ground_release_facts
 
 
@@ -73,6 +73,14 @@ def test_what_changed_is_null_without_comparison_evidence() -> None:
     assert analysis.what_changed is None
 
 
+def test_analysis_prompt_requests_grounded_reader_headline_without_hype() -> None:
+    prompt = development_analysis_prompt(minimal_factual())
+    assert "concrete change" in prompt
+    assert "Return null for reader_headline" in prompt
+    assert "clickbait, hype" in prompt
+    assert "critical, major, significant, or transformative" in prompt
+
+
 def test_composition_adds_only_deterministic_evidence(factual, analysis) -> None:
     source_items = [{
         "id": "11111111-1111-1111-1111-111111111111",
@@ -86,6 +94,22 @@ def test_composition_adds_only_deterministic_evidence(factual, analysis) -> None
     assert result.what_changed is None
     assert result.evidence[0].role == "Repository"
     assert result.evidence[0].claim_indexes == [0]
+
+
+def test_composition_uses_bounded_reader_headline_when_supported(factual, analysis) -> None:
+    source_items = [{
+        "id": "11111111-1111-1111-1111-111111111111",
+        "url": "https://example.com/release",
+        "title": "example/runtime: v2.1.0",
+        "is_primary_source": True,
+        "connector_key": "github",
+    }]
+    result = compose_development(
+        factual,
+        analysis.model_copy(update={"reader_headline": "Runtime 2.1 adds bounded batch processing"}),
+        source_items,
+    )
+    assert result.headline == "Runtime 2.1 adds bounded batch processing"
 
 
 def github_release_item(tag: str = "v2.0.0", *, prerelease: bool = False):

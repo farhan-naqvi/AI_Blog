@@ -82,6 +82,50 @@ function matchesCategory(item: Development, group: PublicCategoryGroup): boolean
   return developmentPublicCategory(item) === group;
 }
 
+const routineReleaseTerms = /\b(bug fixes?|documentation updates?|dependency updates?|maintenance|code refactor(?:ing)?|code quality improvements?|housekeeping)\b/i;
+const concreteChangeTerms = /\b(introduces?|adds?|enables?|supports?|launches?|removes?|changes?|makes available|open-sources?)\b/i;
+const prereleaseTag = /(?:alpha|beta|rc|preview|dev|nightly)|^\d+(?:\.\d+)+(?:a|b|rc)\d+$/i;
+const repositoryReleaseTitle = /^([^/\s]+)\/([^:]+):\s*(\S.+)$/;
+
+export function isReaderValueCandidate(item: Development): boolean {
+  if (item.importance_label !== "Incremental" || item.event_type !== "Release") return true;
+  const match = item.headline.match(repositoryReleaseTitle);
+  if (match && prereleaseTag.test(match[3])) return false;
+  return !(routineReleaseTerms.test(item.summary) && !concreteChangeTerms.test(item.summary));
+}
+
+function developmentSubject(item: Development): string {
+  if (item.product?.trim()) return `product:${item.product.trim().toLowerCase()}`;
+  const repository = item.headline.match(repositoryReleaseTitle);
+  if (repository) return `repository:${repository[1].toLowerCase()}/${repository[2].toLowerCase()}`;
+  if (item.organisation?.trim()) return `organisation:${item.organisation.trim().toLowerCase()}`;
+  return `development:${item.id}`;
+}
+
+export function selectReaderValueDevelopments(items: Development[], limit = 5): Development[] {
+  const selected: Development[] = [];
+  const seenSubjects = new Set<string>();
+  for (const item of items) {
+    if (!isReaderValueCandidate(item)) continue;
+    const subject = developmentSubject(item);
+    if (seenSubjects.has(subject)) continue;
+    seenSubjects.add(subject);
+    selected.push(item);
+    if (selected.length === limit) break;
+  }
+  return selected;
+}
+
+export function readerFacingHeadline(item: Development): string {
+  const release = item.headline.match(repositoryReleaseTitle);
+  if (!release) return item.headline;
+  const concrete = item.summary.match(/\b(introduces?|adds?|enables?|supports?|launches?|removes?|changes?|makes available|open-sources?)\s+(.+?)(?:\.\s|\.$|$)/i);
+  if (!concrete) return item.headline;
+  const product = item.product?.trim() || release[2];
+  const headline = `${product} ${release[3]} ${concrete[1].toLowerCase()} ${concrete[2]}`;
+  return headline.length <= 140 ? headline : `${headline.slice(0, 137).trimEnd()}…`;
+}
+
 export async function getDevelopments(
   limit = 20,
   filters: DevelopmentFilters = {},
@@ -102,14 +146,7 @@ export async function getDevelopments(
     if (difference) return difference;
     return new Date(right.published_at ?? 0).getTime() - new Date(left.published_at ?? 0).getTime();
   });
-  const categoryCounts = new Map<PublicCategoryGroup, number>();
-  const selected = rows.filter((row) => {
-    const category = developmentPublicCategory(row);
-    const count = categoryCounts.get(category) ?? 0;
-    if (count >= 5) return false;
-    categoryCounts.set(category, count + 1);
-    return true;
-  }).slice(0, boundedLimit);
+  const selected = rows.slice(0, boundedLimit);
   if (!selected.length) return selected;
   const ids = selected.map((row) => row.id).join(",");
   const evidence = await publicQuery<{
