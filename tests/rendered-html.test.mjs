@@ -23,7 +23,9 @@ test("server-renders the public intelligence overview", async () => {
   assert.match(html, /Sources monitored/i);
   assert.match(html, /Items detected/i);
   assert.match(html, /Developments analysed/i);
-  assert.match(html, /Developments published/i);
+  assert.match(html, /Verified public/i);
+  assert.match(html, /Major or notable/i);
+  assert.match(html, /Verified updates/i);
   assert.doesNotMatch(html, /codex-preview|react-loading-skeleton|Starter Project/i);
 });
 
@@ -42,6 +44,28 @@ test("public records are uncached and detail separates factual from reported cla
   assert.doesNotMatch(publicData, /revalidate:\s*60/);
   assert.match(detail, /Confirmed source facts/);
   assert.match(detail, /Source-reported claims/);
+  assert.match(detail, /not presented as independently verified/i);
+});
+
+test("latest feed exposes importance filters and accurate incremental labels", async () => {
+  const response = await render("/latest");
+  assert.equal(response.status, 200);
+  const html = await response.text();
+  assert.match(html, /All verified/i);
+  assert.match(html, /Major/i);
+  assert.match(html, /Notable/i);
+  assert.match(html, /Incremental/i);
+  const card = await readFile(new URL("../components/DevelopmentCard.tsx", import.meta.url), "utf8");
+  assert.match(card, /Verified update/);
+  assert.match(card, /confirmed facts/);
+  assert.match(card, /source-reported claims/);
+});
+
+test("daily page distinguishes a monitoring digest from a briefing", async () => {
+  const briefing = await readFile(new URL("../app/briefing/page.tsx", import.meta.url), "utf8");
+  assert.match(briefing, /Daily Monitoring Digest/);
+  assert.match(briefing, /Daily Intelligence Briefing/);
+  assert.match(briefing, /Insufficient verified activity/);
 });
 
 test("server-renders the owner sign-in without private data", async () => {

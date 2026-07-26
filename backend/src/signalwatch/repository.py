@@ -230,7 +230,7 @@ class SupabaseRepository:
             "GET",
             "developments",
             params={
-                "select": "id,headline,summary,category,published_at,why_it_matters,what_changed,limitations",
+                "select": "id,headline,summary,category,importance_label,published_at,why_it_matters,what_changed,limitations,confirmed_claims,reported_claims",
                 "publication_status": "eq.Published",
                 "verification_status": "eq.Verified",
                 "published_at": f"gte.{since.isoformat()}",
@@ -247,16 +247,26 @@ class SupabaseRepository:
         period_end: datetime,
         model_identifier: str,
         prompt_version: str,
+        report_level: str = "Briefing",
     ) -> dict[str, Any]:
+        report_payload = output.model_dump(mode="json")
+        report_payload["report_level"] = report_level
         return await self._request(
             "POST",
             "rpc/create_verified_report",
             json={
                 "p_report_type": report_type,
-                "p_report": output.model_dump(mode="json"),
+                "p_report": report_payload,
                 "p_period_start": period_start.isoformat(),
                 "p_period_end": period_end.isoformat(),
                 "p_model_identifier": model_identifier,
                 "p_prompt_version": prompt_version,
             },
+        )
+
+    async def recalculate_public_visibility(self, *, dry_run: bool = True) -> dict[str, Any]:
+        return await self._request(
+            "POST",
+            "rpc/recalculate_public_visibility",
+            json={"p_dry_run": dry_run},
         )

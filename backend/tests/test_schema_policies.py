@@ -13,6 +13,12 @@ PUBLIC_DASHBOARD_MIGRATION = (
     / "migrations"
     / "202607260001_public_dashboard.sql"
 ).read_text(encoding="utf-8")
+VISIBILITY_MIGRATION = (
+    Path(__file__).parents[2]
+    / "supabase"
+    / "migrations"
+    / "202607260002_visibility_and_digests.sql"
+).read_text(encoding="utf-8")
 
 
 def test_atomic_job_claim_uses_skip_locked() -> None:
@@ -118,3 +124,30 @@ def test_release_metadata_is_bounded_and_ingested_without_article_text() -> None
     assert "jsonb_typeof(release_metadata) = 'object'" in lowered
     assert "item->'release_metadata'" in lowered
     assert "article_body" not in lowered and "raw_html" not in lowered
+
+
+def test_visibility_policy_keeps_verification_and_importance_separate() -> None:
+    lowered = VISIBILITY_MIGRATION.lower()
+    eligibility = lowered.split("function public.development_visibility_blocker", 1)[1].split("$$;", 1)[0]
+    assert "verification_status <> 'verified'" in eligibility
+    assert "jsonb_array_length(development_record.confirmed_claims) = 0" in eligibility
+    assert "claim_consistency = 'contradictory'" in eligibility
+    assert "evidence_role in ('primary announcement', 'documentation', 'repository', 'research paper')" in eligibility
+    assert "importance_label" not in eligibility
+    assert "public.is_development_publicly_visible(id)" in lowered
+
+
+def test_visibility_recalculation_is_service_only_and_idempotent() -> None:
+    lowered = VISIBILITY_MIGRATION.lower()
+    assert "recalculate_public_visibility(p_dry_run boolean default true)" in lowered
+    assert "where d.publication_status <> 'published'" in lowered
+    assert "grant execute on function public.recalculate_public_visibility(boolean) to service_role" in lowered
+    assert "eligible_by_importance" in lowered
+    assert "records_made_public" in lowered
+
+
+def test_daily_report_levels_have_distinct_thresholds() -> None:
+    lowered = VISIBILITY_MIGRATION.lower()
+    assert "daily briefing requires three major or notable developments" in lowered
+    assert "daily monitoring digest requires three verified public developments" in lowered
+    assert "report_level in ('briefing', 'monitoring digest')" in lowered

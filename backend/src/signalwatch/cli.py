@@ -41,6 +41,15 @@ async def _run(args: argparse.Namespace) -> None:
                 },
             )
             result = await service.run(args.connector, args.source_limit)
+        elif args.command == "visibility-policy":
+            result = await repository.recalculate_public_visibility(dry_run=not args.apply)
+            if args.apply and args.create_digest:
+                report_result = await generate_report(repository, None, "Daily")
+                result["daily_report"] = {
+                    "created": report_result["created"],
+                    "report_level": report_result.get("report_level"),
+                    "reason": report_result.get("reason"),
+                }
         else:
             provider = OllamaProvider(str(settings.ollama_base_url), settings.ollama_model)
             if args.command == "worker":
@@ -94,6 +103,9 @@ def main() -> None:
     collect.add_argument("--item-limit", type=int, choices=range(1, 101))
     subparsers.add_parser("smoke-test-collectors")
     subparsers.add_parser("check-ollama")
+    visibility = subparsers.add_parser("visibility-policy")
+    visibility.add_argument("--apply", action="store_true")
+    visibility.add_argument("--create-digest", action="store_true")
     subparsers.add_parser("e2e-verify")
     subparsers.add_parser("replay-extraction")
     subparsers.add_parser("retry-replayed-job")

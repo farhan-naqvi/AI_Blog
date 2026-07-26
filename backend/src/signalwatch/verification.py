@@ -40,9 +40,6 @@ def verify_development(
         reasons.append("evidence contains a major contradiction")
     if unresolved_duplicate:
         reasons.append("possible semantic duplicate is unresolved")
-    if extracted.importance_label == "Incremental":
-        reasons.append("incremental items are not auto-published")
-
     if sensitive or contradictory or unresolved_duplicate:
         return VerificationDecision(
             verification_status="Held",
@@ -59,16 +56,9 @@ def verify_development(
             reasons=reasons,
             exception_type="Insufficient evidence",
         )
-    if extracted.importance_label == "Incremental":
-        return VerificationDecision(
-            verification_status="Verified",
-            confidence_label="High",
-            publication_status="Held",
-            reasons=reasons,
-        )
     return VerificationDecision(
         verification_status="Verified",
         confidence_label="High",
         publication_status="Published",
-        reasons=["strong primary evidence and complete structured fields"],
+        reasons=["strong primary evidence, confirmed claims, and complete processing"],
     )

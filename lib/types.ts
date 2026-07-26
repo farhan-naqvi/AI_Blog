@@ -19,11 +19,15 @@ export type Development = {
   published_at: string | null;
   confirmed_claims: string[];
   reported_claims: string[];
+  primary_source_title?: string | null;
+  primary_source_url?: string | null;
+  primary_evidence_role?: string | null;
 };
 
 export type Report = {
   id: string;
   report_type: "Daily" | "Weekly" | "Topic";
+  report_level: "Briefing" | "Monitoring digest";
   title: string;
   summary: string;
   body: string;
@@ -47,6 +51,10 @@ export type PublicPlatformStats = {
   source_items_detected: number;
   developments_analysed: number;
   published_development_count: number;
+  verified_public_development_count: number;
+  major_notable_public_count: number;
+  incremental_verified_update_count: number;
+  internally_held_count: number;
   last_successful_collection_at: string | null;
   last_public_report_at: string | null;
 };

@@ -47,10 +47,40 @@ async function publicRpcObject<T>(name: string): Promise<T | null> {
   }
 }
 
-export function getDevelopments(limit = 20): Promise<Development[]> {
-  return publicQuery<Development>(
-    `developments?select=*&publication_status=eq.Published&verification_status=eq.Verified&order=published_at.desc&limit=${limit}`,
+const importanceRank = { Major: 1, Notable: 2, Incremental: 3 } as const;
+
+export async function getDevelopments(
+  limit = 20,
+  importance?: Development["importance_label"],
+): Promise<Development[]> {
+  const filter = importance ? `&importance_label=eq.${importance}` : "";
+  const boundedLimit = Math.max(1, Math.min(limit, 200));
+  const rows = await publicQuery<Development>(
+    `developments?select=*&publication_status=eq.Published&verification_status=eq.Verified${filter}&limit=200`,
   );
+  rows.sort((left, right) => {
+    const difference = importanceRank[left.importance_label] - importanceRank[right.importance_label];
+    if (difference) return difference;
+    return new Date(right.published_at ?? 0).getTime() - new Date(left.published_at ?? 0).getTime();
+  });
+  const selected = rows.slice(0, boundedLimit);
+  if (!selected.length) return selected;
+  const ids = selected.map((row) => row.id).join(",");
+  const evidence = await publicQuery<{
+    development_id: string;
+    evidence_role: string;
+    source_items: { title: string; canonical_url: string };
+  }>(`development_sources?select=development_id,evidence_role,source_items(title,canonical_url)&is_primary=eq.true&development_id=in.(${ids})`);
+  const primaryByDevelopment = new Map(evidence.map((row) => [row.development_id, row]));
+  return selected.map((row) => {
+    const primary = primaryByDevelopment.get(row.id);
+    return {
+      ...row,
+      primary_source_title: primary?.source_items.title ?? null,
+      primary_source_url: primary?.source_items.canonical_url ?? null,
+      primary_evidence_role: primary?.evidence_role ?? null,
+    };
+  });
 }
 
 export async function getDevelopment(slug: string): Promise<Development | null> {
