@@ -46,6 +46,7 @@ def test_category_filters_are_specific_and_grounded() -> None:
     assert category_rejection_reason(item("Acme social post", "A generic company update."), MODELS) == "weak_models_signal"
     assert category_rejection_reason(item("A new agent planning method", "short", "research"), RESEARCH) == "insufficient_research_abstract"
     assert category_rejection_reason(item("Runtime 1.2.3", "Dependency housekeeping release."), AGENTS) == "routine_maintenance"
+    assert category_rejection_reason(item("Recommendation system", "A product ranking tutorial."), BUSINESS) == "weak_business_signal"
 
 
 def test_versioned_cross_source_items_share_a_cluster_without_version_only_matching() -> None:

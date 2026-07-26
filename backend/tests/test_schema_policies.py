@@ -31,6 +31,12 @@ COVERAGE_MIGRATION = (
     / "migrations"
     / "202607260004_category_coverage.sql"
 ).read_text(encoding="utf-8")
+CATEGORY_REFINEMENT_MIGRATION = (
+    Path(__file__).parents[2]
+    / "supabase"
+    / "migrations"
+    / "202607260007_refine_development_categories.sql"
+).read_text(encoding="utf-8")
 
 
 def test_atomic_job_claim_uses_skip_locked() -> None:
@@ -137,6 +143,15 @@ def test_category_coverage_migration_preserves_private_table_denials() -> None:
     assert "grant execute on function public.ingest_source_item(jsonb) to anon" not in lowered
     for table in ("processing_jobs", "exceptions", "private_settings", "linkedin_drafts"):
         assert f"grant select on public.{table} to anon" not in lowered
+
+
+def test_public_category_refinement_does_not_change_visibility_rules() -> None:
+    lowered = CATEGORY_REFINEMENT_MIGRATION.lower()
+    assert "verification_status" not in lowered
+    assert "publication_status" not in lowered
+    assert "reported_claims" not in lowered
+    assert "confirmed_claims" not in lowered
+    assert "revoke all on function public.classify_development_public_category" in lowered
 
 
 def test_release_metadata_is_bounded_and_ingested_without_article_text() -> None:

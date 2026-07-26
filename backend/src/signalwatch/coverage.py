@@ -30,7 +30,7 @@ _CATEGORY_TERMS = {
     MODELS: ("model", "llama", "gemma", "qwen", "mistral", "deepseek", "checkpoint", "weights", "license"),
     AGENTS: ("agent", "sdk", "framework", "tool", "runtime", "api", "workflow", "server", "client"),
     INFRASTRUCTURE: ("gpu", "accelerator", "inference", "training", "runtime", "distributed", "hardware", "cloud", "benchmark"),
-    BUSINESS: ("launch", "product", "acquisition", "acquire", "partnership", "pricing", "availability", "funding"),
+    BUSINESS: ("launch", "acquisition", "acquire", "partnership", "pricing", "availability", "funding"),
     POLICY: ("regulation", "guidance", "consultation", "standard", "advisory", "security", "policy", "enforcement", "act"),
 }
 
