@@ -10,7 +10,7 @@ RSS = b"""<?xml version="1.0"?><rss version="2.0"><channel><title>Test</title><i
 @pytest.mark.asyncio
 async def test_rss_parsing_and_normalization() -> None:
     source = SourceRecord(id="1", name="Test", base_url="https://example.com/feed.xml", source_type="Official", retrieval_method="RSS", connector_key="rss", is_primary_source=True, reliability_level="High", poll_interval_minutes=60, rate_limit_per_hour=20)
-    transport = httpx.MockTransport(lambda request: httpx.Response(200, content=RSS, headers={"etag": "abc"}))
+    transport = httpx.MockTransport(lambda request: httpx.Response(200, content=RSS, headers={"etag": "abc", "content-type": "application/rss+xml"}))
     async with httpx.AsyncClient(transport=transport) as client:
         result = await RssCollector().collect(source, client)
     assert len(result.items) == 1

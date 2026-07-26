@@ -29,17 +29,33 @@ async def smoke_test_collectors(
     }
     service = CollectionService(repository, collectors, concurrency=1)
     per_connector: dict[str, dict[str, int | str]] = {}
-    totals = {"sources_checked": 0, "items_detected": 0, "items_new": 0, "jobs_created": 0, "errors": 0}
+    totals = {
+        "sources_checked": 0,
+        "items_detected": 0,
+        "items_new": 0,
+        "jobs_created": 0,
+        "errors": 0,
+        "items_filtered": 0,
+        "duplicates": 0,
+    }
     for key in SMOKE_CONNECTORS:
         source = await repository.smoke_source(key)
         if source is None:
-            result = {"sources_checked": 0, "items_detected": 0, "items_new": 0, "jobs_created": 0, "errors": 1}
+            result = {
+                "sources_checked": 0,
+                "items_detected": 0,
+                "items_new": 0,
+                "jobs_created": 0,
+                "errors": 1,
+                "items_filtered": 0,
+                "duplicates": 0,
+            }
             per_connector[key] = result | {"status": "missing_active_source"}
         else:
             result = await service.run_sources([source])
             per_connector[key] = result | {"status": "ok" if result["errors"] == 0 else "failed"}
         for metric in totals:
-            totals[metric] += int(result[metric])
+            totals[metric] += int(result.get(metric, 0))
     return {
         "mode": "smoke",
         "max_items_per_connector": SMOKE_MAX_ITEMS,

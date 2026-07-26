@@ -18,6 +18,10 @@ class JsonFormatter(logging.Formatter):
             "result_count",
             "new_count",
             "retry_count",
+            "wait_seconds",
+            "filtered_count",
+            "duplicate_count",
+            "filter_reasons",
             "category",
         ):
             value = getattr(record, key, None)

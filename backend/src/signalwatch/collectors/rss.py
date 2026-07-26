@@ -11,8 +11,12 @@ from ..normalization import (
     parse_date,
     stable_hash,
 )
-from ..security import validate_public_url
-from .base import CollectionResult, conditional_headers
+from .base import (
+    XML_CONTENT_TYPES,
+    CollectionResult,
+    conditional_headers,
+    fetch_bounded_response,
+)
 
 
 class RssCollector:
@@ -22,14 +26,18 @@ class RssCollector:
         self.max_items = max(1, min(max_items, 100))
 
     async def collect(self, source: SourceRecord, client: httpx.AsyncClient) -> CollectionResult:
-        response = await client.get(
-            validate_public_url(str(source.base_url)), headers=conditional_headers(source), follow_redirects=True
+        response = await fetch_bounded_response(
+            client,
+            str(source.base_url),
+            connector=self.key,
+            headers=conditional_headers(source),
+            allowed_content_types=XML_CONTENT_TYPES,
+            expected_kind="xml",
+            validate_redirects=True,
+            max_redirects=3,
         )
         if response.status_code == 304:
             return CollectionResult(not_modified=True)
-        response.raise_for_status()
-        if len(response.content) > 5 * 1024 * 1024:
-            raise ValueError("feed exceeds maximum size")
         parsed = feedparser.parse(response.content)
         if parsed.bozo and not parsed.entries:
             raise ValueError(f"invalid feed: {parsed.bozo_exception}")
@@ -62,4 +70,5 @@ class RssCollector:
             items=items,
             etag=response.headers.get("etag"),
             last_modified=response.headers.get("last-modified"),
+            discovered_count=min(len(parsed.entries), self.max_items),
         )

@@ -4,7 +4,12 @@ import httpx
 
 from ..models import CollectedItem, SourceRecord
 from ..normalization import canonicalize_url, content_fingerprint, normalize_title, parse_date, stable_hash
-from .base import CollectionResult, conditional_headers
+from .base import (
+    JSON_CONTENT_TYPES,
+    CollectionResult,
+    conditional_headers,
+    fetch_bounded_response,
+)
 
 
 class GitHubCollector:
@@ -21,16 +26,22 @@ class GitHubCollector:
         headers = conditional_headers(source) | {"accept": "application/vnd.github+json"}
         if self.token:
             headers["authorization"] = f"Bearer {self.token}"
-        response = await client.get(
+        response = await fetch_bounded_response(
+            client,
             f"https://api.github.com/repos/{repository}/releases",
+            connector=self.key,
             params={"per_page": self.max_items},
             headers=headers,
+            allowed_content_types=JSON_CONTENT_TYPES,
+            expected_kind="json",
         )
         if response.status_code == 304:
             return CollectionResult(not_modified=True)
-        response.raise_for_status()
         items: list[CollectedItem] = []
-        for release in response.json()[: self.max_items]:
+        payload = response.json()
+        if not isinstance(payload, list):
+            raise ValueError("invalid GitHub releases response")
+        for release in payload[: self.max_items]:
             if release.get("draft"):
                 continue
             title = normalize_title(release.get("name") or release.get("tag_name") or "")
@@ -60,4 +71,5 @@ class GitHubCollector:
             items=items,
             etag=response.headers.get("etag"),
             last_modified=response.headers.get("last-modified"),
+            discovered_count=min(len(payload), self.max_items),
         )

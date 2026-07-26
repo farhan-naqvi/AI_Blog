@@ -5,7 +5,7 @@ import httpx
 
 from ..models import CollectedItem, SourceRecord
 from ..normalization import canonicalize_url, content_fingerprint, normalize_title, parse_date, stable_hash
-from .base import CollectionResult
+from .base import XML_CONTENT_TYPES, CollectionResult, fetch_bounded_response
 
 
 class ArxivCollector:
@@ -26,8 +26,14 @@ class ArxivCollector:
                 "sortOrder": "descending",
             }
         )
-        response = await client.get(url, headers={"user-agent": "SignalWatch/0.1"})
-        response.raise_for_status()
+        response = await fetch_bounded_response(
+            client,
+            url,
+            connector=self.key,
+            headers={"user-agent": "SignalWatch/0.1"},
+            allowed_content_types=XML_CONTENT_TYPES,
+            expected_kind="xml",
+        )
         parsed = feedparser.parse(response.content)
         if parsed.bozo and not parsed.entries:
             raise ValueError("invalid arXiv Atom response")
@@ -53,4 +59,6 @@ class ArxivCollector:
                     title_hash=stable_hash(title.casefold()),
                 )
             )
-        return CollectionResult(items=items)
+        return CollectionResult(
+            items=items, discovered_count=min(len(parsed.entries), self.max_items)
+        )
