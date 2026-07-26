@@ -1,4 +1,4 @@
-import type { Development, Report, Source } from "./types";
+import type { Development, PublicPlatformStats, Report, Source } from "./types";
 
 const baseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/$/, "");
 const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -8,7 +8,7 @@ async function publicQuery<T>(path: string): Promise<T[]> {
   try {
     const response = await fetch(`${baseUrl}/rest/v1/${path}`, {
       headers: { apikey: anonKey, Authorization: `Bearer ${anonKey}` },
-      next: { revalidate: 60 },
+      cache: "no-store",
     });
     if (!response.ok) return [];
     return (await response.json()) as T[];
@@ -29,6 +29,21 @@ async function publicRpc<T>(name: string, body: Record<string, string>): Promise
     return response.ok ? (await response.json()) as T[] : [];
   } catch {
     return [];
+  }
+}
+
+async function publicRpcObject<T>(name: string): Promise<T | null> {
+  if (!baseUrl || !anonKey) return null;
+  try {
+    const response = await fetch(`${baseUrl}/rest/v1/rpc/${name}`, {
+      method: "POST",
+      headers: { apikey: anonKey, Authorization: `Bearer ${anonKey}`, "content-type": "application/json" },
+      body: "{}",
+      cache: "no-store",
+    });
+    return response.ok ? await response.json() as T : null;
+  } catch {
+    return null;
   }
 }
 
@@ -53,7 +68,11 @@ export function getReports(type?: "Daily" | "Weekly", limit = 12): Promise<Repor
 }
 
 export function getSources(): Promise<Source[]> {
-  return publicQuery<Source>("sources?select=id,name,base_url,source_type,retrieval_method,is_primary_source,reliability_level,poll_interval_minutes,last_success_at&active=eq.true&order=name");
+  return publicRpc<Source>("get_public_sources", {});
+}
+
+export function getPublicPlatformStats(): Promise<PublicPlatformStats | null> {
+  return publicRpcObject<PublicPlatformStats>("get_public_platform_stats");
 }
 
 export function searchDevelopments(query: string): Promise<Development[]> {

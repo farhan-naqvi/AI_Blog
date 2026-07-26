@@ -2,11 +2,10 @@ import Link from "next/link";
 import { DevelopmentCard } from "@/components/DevelopmentCard";
 import { EmptyState } from "@/components/EmptyState";
 import { PublicShell } from "@/components/PublicShell";
-import { getDevelopments, getReports, getSources } from "@/lib/public-data";
+import { getDevelopments, getPublicPlatformStats, getReports } from "@/lib/public-data";
 
 export default async function OverviewPage() {
-  const [developments, reports, sources] = await Promise.all([getDevelopments(6), getReports("Daily", 1), getSources()]);
-  const today = developments.filter((item) => item.published_at && new Date(item.published_at).toDateString() === new Date().toDateString()).length;
+  const [developments, reports, stats] = await Promise.all([getDevelopments(6), getReports("Daily", 1), getPublicPlatformStats()]);
   const categories = [...new Set(developments.map((item) => item.category))].slice(0, 5);
   return (
     <PublicShell>
@@ -18,16 +17,16 @@ export default async function OverviewPage() {
       </section>
       <section className="signal-strip">
         <div className="shell metrics">
-          <div><strong>{today}</strong><span>Published today</span></div>
-          <div><strong>{developments.length}</strong><span>Recent verified</span></div>
-          <div><strong>{sources.length}</strong><span>Active sources</span></div>
-          <div><strong>{categories.length}</strong><span>Active categories</span></div>
+          <div><strong>{stats?.active_source_count ?? 0}</strong><span>Sources monitored</span></div>
+          <div><strong>{stats?.source_items_detected ?? 0}</strong><span>Items detected</span></div>
+          <div><strong>{stats?.developments_analysed ?? 0}</strong><span>Developments analysed</span></div>
+          <div><strong>{stats?.published_development_count ?? 0}</strong><span>Developments published</span></div>
         </div>
       </section>
       <section className="shell section-grid">
         <div>
           <div className="section-heading"><div><span className="section-index">01</span><h2>Latest important developments</h2></div><Link href="/latest">View all →</Link></div>
-          <div className="development-list">{developments.length ? developments.slice(0, 4).map((item, index) => <DevelopmentCard key={item.id} item={item} rank={index + 1} />) : <EmptyState />}</div>
+          <div className="development-list">{developments.length ? developments.slice(0, 4).map((item, index) => <DevelopmentCard key={item.id} item={item} rank={index + 1} />) : <EmptyState title="Monitoring is active" detail="No development currently meets the public publication threshold." />}</div>
         </div>
         <aside className="brief-panel">
           <div className="panel-label">DAILY BRIEFING</div>

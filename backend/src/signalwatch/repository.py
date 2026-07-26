@@ -204,7 +204,7 @@ class SupabaseRepository:
                 "GET",
                 "sources",
                 params={
-                    "select": "is_primary_source,source_type,retrieval_method,connector_key",
+                    "select": "name,base_url,is_primary_source,source_type,retrieval_method,connector_key,connector_config",
                     "id": f"eq.{rows[0]['source_id']}",
                 },
             )

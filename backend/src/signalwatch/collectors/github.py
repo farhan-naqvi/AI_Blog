@@ -2,7 +2,7 @@ from datetime import UTC, datetime
 
 import httpx
 
-from ..models import CollectedItem, SourceRecord
+from ..models import CollectedItem, ReleaseMetadata, SourceRecord
 from ..normalization import canonicalize_url, content_fingerprint, normalize_title, parse_date, stable_hash
 from .base import (
     JSON_CONTENT_TYPES,
@@ -65,6 +65,15 @@ class GitHubCollector:
                     event_type_hint="release",
                     content_hash=content_fingerprint(title, body),
                     title_hash=stable_hash(f"{repository}:{title}".casefold()),
+                    release_metadata=ReleaseMetadata(
+                        repository=repository,
+                        organisation=repository.split("/", 1)[0],
+                        release_tag=str(release.get("tag_name") or title)[:120],
+                        release_title=title[:300],
+                        published_date=published.date() if published else None,
+                        prerelease=bool(release.get("prerelease")),
+                        official_repository_release=source.is_primary_source,
+                    ),
                 )
             )
         return CollectionResult(

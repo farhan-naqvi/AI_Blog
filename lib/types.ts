@@ -17,6 +17,8 @@ export type Development = {
   verification_status: "Verified" | "Developing" | "Held";
   publication_status: "Published" | "Held" | "Rejected";
   published_at: string | null;
+  confirmed_claims: string[];
+  reported_claims: string[];
 };
 
 export type Report = {
@@ -31,13 +33,20 @@ export type Report = {
 };
 
 export type Source = {
-  id: string;
-  name: string;
-  base_url: string;
+  display_name: string;
+  public_category: string;
   source_type: string;
-  retrieval_method: string;
-  is_primary_source: boolean;
-  reliability_level: string;
-  poll_interval_minutes: number;
-  last_success_at: string | null;
+  active: boolean;
+  homepage_url: string | null;
+  last_updated_date: string | null;
+};
+
+export type PublicPlatformStats = {
+  active_source_count: number;
+  source_type_count: number;
+  source_items_detected: number;
+  developments_analysed: number;
+  published_development_count: number;
+  last_successful_collection_at: string | null;
+  last_public_report_at: string | null;
 };

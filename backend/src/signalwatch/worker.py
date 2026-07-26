@@ -14,6 +14,7 @@ from .prompts import (
     linkedin_prompt,
 )
 from .repository import SupabaseRepository
+from .release_metadata import apply_release_importance, ground_release_facts
 from .security import fetch_readable_text
 from .verification import verify_development
 
@@ -151,10 +152,12 @@ class LocalWorker:
         stage_a_repair_used = bool(getattr(self.provider, "last_repair_used", False))
         if transitions is not None:
             transitions.append({"state": "factual_extraction_validated", "created": False})
+        factual, release_signals = ground_release_facts(factual, source_items)
         stage_b_started = perf_counter()
         analysis = await self.provider.generate_structured(
-            development_analysis_prompt(factual), DevelopmentAnalysis
+            development_analysis_prompt(factual, release_signals), DevelopmentAnalysis
         )
+        analysis = apply_release_importance(analysis, release_signals)
         stage_b_seconds = perf_counter() - stage_b_started
         stage_b_repair_used = bool(getattr(self.provider, "last_repair_used", False))
         if transitions is not None:

@@ -27,6 +27,17 @@ The migrations are designed for a new SignalWatch project. The initial migration
 
 Never use `db reset --linked` against this project. If the first migration is partially applied, stop and inspect migration history instead of rerunning the SQL manually.
 
+## Auth URLs for the deployed owner workspace
+
+In Supabase Dashboard, open **Authentication → URL Configuration** and set:
+
+1. **Site URL:** `https://signalwatch-ai.farhannaqvi16.chatgpt.site`
+2. **Redirect URLs:** add `https://signalwatch-ai.farhannaqvi16.chatgpt.site/**`
+3. Keep local development explicitly allowed with `http://localhost:3000/**` and, when using the alternate local port, `http://localhost:3001/**`.
+4. Save the configuration, sign in at `/owner-login`, confirm `/admin` loads, then use **Sign out** and confirm `/admin` redirects back to `/owner-login`.
+
+Do not place the owner password, service-role key, session tokens, or Auth user ID in these URL fields or documentation.
+
 ## 2. Verify schema and functions
 
 Run this read-only query in the SQL Editor:

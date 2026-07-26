@@ -201,6 +201,18 @@ class SourceRecord(BaseModel):
     connector_config: dict = Field(default_factory=dict)
 
 
+class ReleaseMetadata(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    repository: str = Field(min_length=3, max_length=200)
+    organisation: str = Field(min_length=1, max_length=100)
+    release_tag: str = Field(min_length=1, max_length=120)
+    release_title: str = Field(min_length=1, max_length=300)
+    published_date: date | None = None
+    prerelease: bool = False
+    official_repository_release: bool = False
+
+
 class CollectedItem(BaseModel):
     source_id: str
     source_identifier: str | None = Field(default=None, max_length=500)
@@ -213,6 +225,7 @@ class CollectedItem(BaseModel):
     language: str = Field(default="en", max_length=12)
     content_hash: str = Field(min_length=64, max_length=64)
     title_hash: str = Field(min_length=64, max_length=64)
+    release_metadata: ReleaseMetadata | None = None
 
     @field_validator("published_at")
     @classmethod

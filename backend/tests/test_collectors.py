@@ -16,11 +16,16 @@ def source(key: str, config: dict) -> SourceRecord:
 
 @pytest.mark.asyncio
 async def test_github_release_normalization() -> None:
-    payload = [{"id": 42, "name": "v2.0", "tag_name": "v2.0", "html_url": "https://github.com/acme/runtime/releases/tag/v2.0", "body": "Major runtime update", "published_at": "2026-01-20T10:00:00Z", "draft": False}]
+    payload = [{"id": 42, "name": "v2.0", "tag_name": "v2.0", "html_url": "https://github.com/acme/runtime/releases/tag/v2.0", "body": "Major runtime update", "published_at": "2026-01-20T10:00:00Z", "draft": False, "prerelease": False}]
     async with httpx.AsyncClient(transport=httpx.MockTransport(lambda request: httpx.Response(200, json=payload))) as client:
         result = await GitHubCollector().collect(source("github", {"repository": "acme/runtime"}), client)
     assert result.items[0].source_identifier == "42"
     assert result.items[0].event_type_hint == "release"
+    assert result.items[0].release_metadata is not None
+    assert result.items[0].release_metadata.repository == "acme/runtime"
+    assert result.items[0].release_metadata.release_tag == "v2.0"
+    assert result.items[0].release_metadata.prerelease is False
+    assert result.items[0].release_metadata.official_repository_release is True
 
 
 @pytest.mark.asyncio

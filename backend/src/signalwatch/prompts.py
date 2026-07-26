@@ -3,7 +3,7 @@ from typing import Any
 
 from .models import FactualExtraction
 
-PROMPT_VERSION = "development-v3"
+PROMPT_VERSION = "development-v4"
 
 
 def factual_extraction_prompt(source_items: list[dict[str, Any]], readable_text: str) -> str:
@@ -12,6 +12,7 @@ def factual_extraction_prompt(source_items: list[dict[str, Any]], readable_text:
         "title": item["title"],
         "published_at": item.get("published_at"),
         "excerpt": item.get("excerpt", ""),
+        "release_metadata": item.get("release_metadata"),
     }
     return (
         "Extract factual information using only the supplied source. Return null for unknown "
@@ -19,7 +20,9 @@ def factual_extraction_prompt(source_items: list[dict[str, Any]], readable_text:
         "limitations exist. Put directly observable source facts in confirmed_claims (for "
         "example, a release exists, a repository added a documented feature, or a paper "
         "introduces a stated method). Confirmed here means supported by this source, not "
-        "independently verified. Put performance, benchmark, capability, or outcome assertions "
+        "independently verified. For an official repository release, its repository, release tag, "
+        "release title, published date, and named entries visibly present in release notes are "
+        "observable facts. Put performance, benchmark, capability, compatibility, or outcome assertions "
         "made by the source in reported_claims unless independent evidence is supplied. Exclude "
         "opinions, promotional language, and unsupported inference from both lists. Do not invent "
         "independent confirmation, dates, entities, limitations, claims, or metrics. "
@@ -30,14 +33,19 @@ def factual_extraction_prompt(source_items: list[dict[str, Any]], readable_text:
     )
 
 
-def development_analysis_prompt(factual: FactualExtraction) -> str:
+def development_analysis_prompt(
+    factual: FactualExtraction, release_signals: dict[str, Any] | None = None
+) -> str:
     return (
         "Analyze only the validated factual extraction below. Do not repeat or change factual "
         "claims. Explain why it matters conservatively. No previous-version evidence was supplied, "
         "so return null for what_changed. Return empty arrays when affected groups or watch items "
-        "are unsupported. Classify importance conservatively and do not invent facts. Output only "
+        "are unsupported. Classify importance conservatively using the bounded release signals when "
+        "provided; a major-version signal alone must not imply Major. Do not invent facts. Output only "
         "the schema-conforming object.\n\nFACTUAL EXTRACTION:\n"
         + json.dumps(factual.model_dump(mode="json"), ensure_ascii=False, separators=(",", ":"))
+        + "\n\nBOUNDED RELEASE SIGNALS:\n"
+        + json.dumps(release_signals or {}, ensure_ascii=False, separators=(",", ":"), default=str)
     )
 
 
