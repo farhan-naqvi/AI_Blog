@@ -14,22 +14,25 @@ def compose_development(
     source_items: list[dict[str, Any]],
 ) -> ExtractedDevelopment:
     item = source_items[0]
-    connector = str(item.get("connector_key") or "").casefold()
-    if connector == "github":
-        role = "Repository"
-    elif connector == "arxiv":
-        role = "Research paper"
-    elif item.get("is_primary_source", False):
-        role = "Primary announcement"
-    else:
-        role = "Discovery signal"
-    url = item.get("canonical_url") or item["url"]
-    evidence = EvidenceReference(
-        source_item_id=item["id"],
-        url=url,
-        role=role,
-        claim_indexes=list(range(len(factual.confirmed_claims))),
-    )
+    evidence: list[EvidenceReference] = []
+    for index, source_item in enumerate(source_items):
+        connector = str(source_item.get("connector_key") or "").casefold()
+        if connector == "github":
+            role = "Repository"
+        elif connector == "arxiv":
+            role = "Research paper"
+        elif source_item.get("is_primary_source", False):
+            role = "Primary announcement"
+        else:
+            role = "Discovery signal"
+        evidence.append(
+            EvidenceReference(
+                source_item_id=source_item["id"],
+                url=source_item.get("canonical_url") or source_item["url"],
+                role=role,
+                claim_indexes=list(range(len(factual.confirmed_claims))) if index == 0 else [],
+            )
+        )
     confidence_reasons = [
         "One primary source was supplied."
         if item.get("is_primary_source", False)
@@ -53,5 +56,5 @@ def compose_development(
         confidence_reasons=confidence_reasons,
         importance_reasons=analysis.importance_reasons,
         importance_label=analysis.importance_label,
-        evidence=[evidence],
+        evidence=evidence,
     )

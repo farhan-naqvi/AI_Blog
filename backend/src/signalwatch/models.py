@@ -226,6 +226,7 @@ class CollectedItem(BaseModel):
     content_hash: str = Field(min_length=64, max_length=64)
     title_hash: str = Field(min_length=64, max_length=64)
     release_metadata: ReleaseMetadata | None = None
+    cluster_key: str | None = Field(default=None, min_length=64, max_length=64)
 
     @field_validator("published_at")
     @classmethod

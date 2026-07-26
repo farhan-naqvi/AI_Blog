@@ -16,7 +16,10 @@ class ArxivCollector:
 
     async def collect(self, source: SourceRecord, client: httpx.AsyncClient) -> CollectionResult:
         categories = source.connector_config.get("categories", ["cs.AI", "cs.LG"])
-        query = " OR ".join(f"cat:{category}" for category in categories)
+        category_query = " OR ".join(f"cat:{category}" for category in categories)
+        keywords = [str(value).strip() for value in source.connector_config.get("keywords", []) if str(value).strip()]
+        keyword_query = " OR ".join(f'all:"{keyword}"' for keyword in keywords)
+        query = f"({category_query}) AND ({keyword_query})" if keyword_query else category_query
         url = "https://export.arxiv.org/api/query?" + urlencode(
             {
                 "search_query": query,

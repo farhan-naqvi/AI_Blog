@@ -2,7 +2,13 @@ import Link from "next/link";
 import { DevelopmentCard } from "@/components/DevelopmentCard";
 import { EmptyState } from "@/components/EmptyState";
 import { PublicShell } from "@/components/PublicShell";
-import { getDevelopments, getPublicPlatformStats, getReports } from "@/lib/public-data";
+import {
+  developmentPublicCategory,
+  getDevelopments,
+  getPublicPlatformStats,
+  getReports,
+  publicCategoryGroups,
+} from "@/lib/public-data";
 
 function reportLabel(level: "Briefing" | "Monitoring digest" | "Activity summary" | undefined) {
   if (level === "Monitoring digest") return "DAILY MONITORING DIGEST";
@@ -12,11 +18,14 @@ function reportLabel(level: "Briefing" | "Monitoring digest" | "Activity summary
 
 export default async function OverviewPage() {
   const [developments, reports, stats] = await Promise.all([
-    getDevelopments(6),
+    getDevelopments(30),
     getReports("Daily", 1),
     getPublicPlatformStats(),
   ]);
-  const categories = [...new Set(developments.map((item) => item.category))].slice(0, 5);
+  const grouped = publicCategoryGroups.map((category) => ({
+    category,
+    items: developments.filter((item) => developmentPublicCategory(item) === category).slice(0, 5),
+  }));
   const publicCount = stats?.published_development_count ?? 0;
   const noMajorVerified = publicCount > 0 && (stats?.major_verified_public_count ?? 0) === 0;
 
@@ -40,6 +49,19 @@ export default async function OverviewPage() {
           <div><strong>{stats?.incremental_public_count ?? 0}</strong><span>Incremental</span></div>
         </div>
       </section>
+      <section className="shell category-monitor">
+        <div className="section-heading"><div><span className="section-index">01</span><h2>Monitoring by category</h2></div></div>
+        <div className="category-grid">
+          {grouped.map(({ category, items }) => (
+            <section className="category-panel" key={category}>
+              <div className="category-panel-head"><h3>{category}</h3><Link href={`/latest?category=${encodeURIComponent(category)}`}>View all</Link></div>
+              {items.length
+                ? items.map((item, index) => <DevelopmentCard key={item.id} item={item} rank={index + 1} />)
+                : <EmptyState title="No public developments yet" detail="Monitoring is active; no item in this category currently meets the public evidence policy." />}
+            </section>
+          ))}
+        </div>
+      </section>
       <section className="shell section-grid">
         <div>
           <div className="section-heading"><div><span className="section-index">01</span><h2>Latest public developments</h2></div><Link href="/latest">View all →</Link></div>
@@ -49,7 +71,7 @@ export default async function OverviewPage() {
         <aside className="brief-panel">
           <div className="panel-label">{reportLabel(reports[0]?.report_level)}</div>
           {reports[0] ? <><h2>{reports[0].title}</h2><p>{reports[0].summary}</p><Link href="/briefing">Open daily report →</Link></> : <><h2>The daily signal</h2><p>No public activity summary or report is available yet.</p><span className="muted-link">Awaiting reliably sourced activity</span></>}
-          <div className="category-stack"><span>MONITORED NOW</span>{(categories.length ? categories : ["AI infrastructure", "Open source", "Research"]).map((category) => <div key={category}>{category}<i /></div>)}</div>
+          <div className="category-stack"><span>MONITORED NOW</span>{publicCategoryGroups.map((category) => <div key={category}>{category}<i /></div>)}</div>
         </aside>
       </section>
       <section className="shell principles"><div><span>Evidence hierarchy</span><h2>Primary sources lead.</h2></div><p>Verified facts and source-reported claims are labelled separately. Sensitive, conflicting, or insufficiently grounded developments remain private.</p><Link href="/sources">How verification works →</Link></section>

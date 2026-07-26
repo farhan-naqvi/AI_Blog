@@ -3,7 +3,7 @@ from datetime import UTC
 import pytest
 
 from signalwatch.models import ReportOutput
-from signalwatch.synthesis import generate_report
+from signalwatch.synthesis import _limit_per_category, generate_report
 
 
 def rows(*importance: str, status: str = "Verified") -> list[dict]:
@@ -121,3 +121,23 @@ async def test_weekly_report_still_requires_five_public_items() -> None:
     result = await generate_report(repository, provider, "Weekly")
     assert result == {"created": False, "reason": "insufficient_activity", "count": 4}
     assert provider.called is False
+
+
+def test_digest_orders_evidence_then_importance_and_limits_public_groups() -> None:
+    developments = [
+        {"id": f"i{index}", "category": "Infrastructure", "event_type": "Release",
+         "verification_status": "Reported", "importance_label": "Incremental",
+         "published_at": f"2026-07-{20-index:02d}T00:00:00Z"}
+        for index in range(7)
+    ]
+    developments.extend([
+        {"id": "reported-major", "category": "Infrastructure", "event_type": "Release",
+         "verification_status": "Reported", "importance_label": "Major",
+         "published_at": "2026-07-01T00:00:00Z"},
+        {"id": "verified-major", "category": "Infrastructure", "event_type": "Release",
+         "verification_status": "Verified", "importance_label": "Major",
+         "published_at": "2026-06-01T00:00:00Z"},
+    ])
+    selected = _limit_per_category(developments)
+    assert len(selected) == 5
+    assert [row["id"] for row in selected[:2]] == ["verified-major", "reported-major"]

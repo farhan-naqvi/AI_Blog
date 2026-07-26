@@ -4,6 +4,7 @@ from typing import Any
 import httpx
 
 from .config import Settings
+from .coverage import PUBLIC_CATEGORIES, PROCESSING_QUOTAS, select_balanced, source_category
 from .models import (
     CollectedItem,
     ExtractedDevelopment,
@@ -70,6 +71,13 @@ class SupabaseRepository:
             },
         )
         return SourceRecord.model_validate(rows[0]) if rows else None
+
+    async def coverage_sources(self, *, active_only: bool = True) -> list[SourceRecord]:
+        params = {"select": "*", "order": "name.asc"}
+        if active_only:
+            params["active"] = "eq.true"
+        rows = await self._request("GET", "sources", params=params)
+        return [SourceRecord.model_validate(row) for row in rows]
 
     async def record_source_result(
         self,
@@ -138,6 +146,27 @@ class SupabaseRepository:
             : max(0, min(limit, len(connector_order)))
         ]
 
+    async def balanced_pending_jobs(self, limit: int = 20) -> list[dict[str, Any]]:
+        rows = await self._request(
+            "GET",
+            "processing_jobs",
+            params={
+                "select": "id,source_item_id,status,priority,created_at,attempt_count,last_error",
+                "status": "eq.Pending",
+                "order": "priority.desc,created_at.asc,id.asc",
+                "limit": "200",
+            },
+        )
+        enriched: list[dict[str, Any]] = []
+        for row in rows:
+            items = await self.source_items_for_job(row)
+            if not items:
+                continue
+            category = source_category(items[0])
+            if category in PUBLIC_CATEGORIES:
+                enriched.append({**row, "public_category": category})
+        return select_balanced(enriched, max(0, min(limit, 20)), PROCESSING_QUOTAS)
+
     async def replay_job(self) -> dict[str, Any] | None:
         rows = await self._request(
             "GET",
@@ -199,18 +228,32 @@ class SupabaseRepository:
         rows = await self._request(
             "GET", "source_items", params={"select": "*", "id": f"eq.{job['source_item_id']}"}
         )
+        if rows and rows[0].get("cluster_key"):
+            rows = await self._request(
+                "GET",
+                "source_items",
+                params={
+                    "select": "*",
+                    "cluster_key": f"eq.{rows[0]['cluster_key']}",
+                    "order": "detected_at.asc",
+                    "limit": "12",
+                },
+            )
         if rows:
             sources = await self._request(
                 "GET",
                 "sources",
                 params={
-                    "select": "name,base_url,is_primary_source,source_type,retrieval_method,connector_key,connector_config",
-                    "id": f"eq.{rows[0]['source_id']}",
+                    "select": "id,name,base_url,is_primary_source,source_type,retrieval_method,connector_key,connector_config",
+                    "id": f"in.({','.join(row['source_id'] for row in rows)})",
                 },
             )
-            if sources:
-                rows[0].update(sources[0])
-            rows[0]["is_primary_source"] = bool(sources and sources[0]["is_primary_source"])
+            source_map = {source["id"]: source for source in sources}
+            for row in rows:
+                matched = source_map.get(row["source_id"])
+                if matched:
+                    row.update({key: value for key, value in matched.items() if key != "id"})
+                row["is_primary_source"] = bool(matched and matched["is_primary_source"])
         return rows
 
     async def health_snapshot(self) -> dict[str, Any]:
@@ -230,7 +273,7 @@ class SupabaseRepository:
             "GET",
             "developments",
             params={
-                "select": "id,headline,summary,category,importance_label,verification_status,published_at,why_it_matters,what_changed,limitations,confirmed_claims,reported_claims",
+                "select": "id,headline,summary,category,public_category,event_type,importance_label,verification_status,published_at,why_it_matters,what_changed,limitations,confirmed_claims,reported_claims",
                 "publication_status": "eq.Published",
                 "verification_status": "in.(Verified,Reported)",
                 "published_at": f"gte.{since.isoformat()}",

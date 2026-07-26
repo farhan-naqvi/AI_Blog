@@ -18,7 +18,13 @@ Retrieval priority is official API, RSS/Atom, sitemap/change detection, then rev
 - Bypassing access controls or robots rules
 - Treating a discovery signal as primary evidence when an official source exists
 
-The seed registry includes 41 sources. Twenty-one use implemented connectors and are active; review-dependent sitemap, HTML, government, and discovery connectors are paused. Enable a paused source only after confirming its permitted retrieval path and adding a tested connector.
+The curated registry includes 80 sources. Fifty-one are active through the tested RSS/Atom, GitHub, arXiv, and Hugging Face connectors; review-dependent sitemap, HTML, government API, and discovery connectors remain paused. Every source has one public category in `connector_config.public_category`.
+
+Manual coverage collection is bounded to 150 raw entries: at most three selected sources per category in the current command and ten entries per source. Candidate queue ceilings are Models 15, Agents/developer tools 15, Research 20, Infrastructure 10, Business/products 10, and Policy/safety/security 10. These are safety ceilings, never quotas.
+
+Focused arXiv streams combine reviewed categories with topic keywords. Cross-source candidates receive a deterministic cluster key from release version/product metadata or normalized title tokens and date proximity. Exact duplicates still use canonical URL, source identifier, content hash, and title hash; clustering never merges events based only on a company name.
+
+Enable a paused source only after confirming its permitted retrieval path, freshness signal, meaningful development-level output, and tested connector behavior.
 
 ## Hugging Face discovery filtering
 

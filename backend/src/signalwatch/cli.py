@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from .collection import CollectionService
 from .collectors import ArxivCollector, GitHubCollector, HuggingFaceCollector, RssCollector
 from .config import OllamaSettings, get_settings
-from .diagnostics import check_ollama, smoke_test_collectors
+from .diagnostics import bounded_category_collection, check_ollama, coverage_audit, smoke_test_collectors
 from .llm import OllamaProvider
 from .logging import configure_logging
 from .repository import SupabaseRepository
@@ -27,6 +27,10 @@ async def _run(args: argparse.Namespace) -> None:
     try:
         if args.command == "smoke-test-collectors":
             result = await smoke_test_collectors(repository, settings)
+        elif args.command == "coverage-audit":
+            result = await coverage_audit(repository)
+        elif args.command == "coverage-collect":
+            result = await bounded_category_collection(repository, settings)
         elif args.command == "collect":
             github_token = settings.github_token.get_secret_value() if settings.github_token else None
             hf_token = settings.huggingface_token.get_secret_value() if settings.huggingface_token else None
@@ -85,6 +89,10 @@ async def _run(args: argparse.Namespace) -> None:
                 result = await LocalWorker(
                     repository, provider, settings.local_worker_id
                 ).run_representative_batch(args.max_jobs)
+            elif args.command == "coverage-batch":
+                result = await LocalWorker(
+                    repository, provider, settings.local_worker_id
+                ).run_balanced_batch(args.max_jobs)
             else:
                 result = await generate_report(repository, provider, args.report_type)
         print(json.dumps(result, separators=(",", ":")))
@@ -102,6 +110,8 @@ def main() -> None:
     collect.add_argument("--source-limit", type=int, choices=range(1, 51))
     collect.add_argument("--item-limit", type=int, choices=range(1, 101))
     subparsers.add_parser("smoke-test-collectors")
+    subparsers.add_parser("coverage-audit")
+    subparsers.add_parser("coverage-collect")
     subparsers.add_parser("check-ollama")
     visibility = subparsers.add_parser("visibility-policy")
     visibility.add_argument("--apply", action="store_true")
@@ -111,6 +121,8 @@ def main() -> None:
     subparsers.add_parser("retry-replayed-job")
     controlled_batch = subparsers.add_parser("controlled-batch")
     controlled_batch.add_argument("--max-jobs", type=int, choices=range(1, 5), default=4)
+    coverage_batch = subparsers.add_parser("coverage-batch")
+    coverage_batch.add_argument("--max-jobs", type=int, choices=range(1, 21), default=20)
     worker = subparsers.add_parser("worker")
     worker.add_argument("--max-jobs", "--batch-size", dest="max_jobs", type=int, default=5)
     worker.add_argument("--watch", action="store_true")

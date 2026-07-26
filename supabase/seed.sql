@@ -47,5 +47,5 @@ values
   ('Hacker News', 'https://hacker-news.firebaseio.com/v0/', 'Discovery', 'API', 'hackernews', '{}', false, 'Low', 60, 30, false)
 on conflict (name) do update set
   base_url = excluded.base_url,
-  connector_config = excluded.connector_config,
+  connector_config = excluded.connector_config || public.sources.connector_config,
   poll_interval_minutes = excluded.poll_interval_minutes;

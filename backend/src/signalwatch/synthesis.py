@@ -1,6 +1,7 @@
 from datetime import UTC, datetime, timedelta
 
 from .llm import LanguageModelProvider
+from .coverage import development_category
 from .models import ReportOutput
 from .prompts import report_prompt
 from .repository import SupabaseRepository
@@ -10,11 +11,25 @@ DIGEST_TEMPLATE_VERSION = "daily-digest-v2"
 ACTIVITY_TEMPLATE_VERSION = "daily-activity-v1"
 
 
+def _public_rank(row: dict) -> tuple[int, float]:
+    order = {
+        ("Verified", "Major"): 0,
+        ("Reported", "Major"): 1,
+        ("Verified", "Notable"): 2,
+        ("Reported", "Notable"): 3,
+        ("Verified", "Incremental"): 4,
+        ("Reported", "Incremental"): 5,
+    }
+    published = row.get("published_at")
+    timestamp = datetime.fromisoformat(published.replace("Z", "+00:00")).timestamp() if published else 0
+    return order.get((row.get("verification_status"), row.get("importance_label")), 6), -timestamp
+
+
 def _limit_per_category(rows: list[dict], limit: int = 5) -> list[dict]:
     selected: list[dict] = []
     category_counts: dict[str, int] = {}
-    for row in rows:
-        category = row.get("category") or "Other"
+    for row in sorted(rows, key=_public_rank):
+        category = development_category(row)
         if category_counts.get(category, 0) >= limit:
             continue
         category_counts[category] = category_counts.get(category, 0) + 1
@@ -25,30 +40,32 @@ def _limit_per_category(rows: list[dict], limit: int = 5) -> list[dict]:
 def _monitoring_digest(developments: list[dict], now: datetime) -> ReportOutput:
     groups = (
         ("Major verified developments", "Verified", "Major"),
+        ("Reported announcements - Major", "Reported", "Major"),
         ("Notable verified developments", "Verified", "Notable"),
+        ("Reported announcements - Notable", "Reported", "Notable"),
         ("Other verified updates", "Verified", "Incremental"),
-        ("Reported announcements", "Reported", None),
+        ("Reported announcements - Incremental", "Reported", "Incremental"),
     )
+    selected_developments = _limit_per_category(developments)
     sections: list[str] = []
     for heading, status, importance in groups:
         rows = [
             row
-            for row in developments
+            for row in selected_developments
             if row.get("verification_status") == status
             and (importance is None or row.get("importance_label") == importance)
         ]
-        rows = _limit_per_category(rows)
         if rows:
             entries = "\n".join(f"- {row['headline']}: {row['summary']}" for row in rows)
             sections.append(f"{heading}\n{entries}")
     return ReportOutput(
         title=f"Daily Monitoring Digest — {now.date().isoformat()}",
         summary=(
-            f"{len(developments)} reliably sourced public developments were recorded. "
+            f"{len(selected_developments)} reliably sourced public developments were recorded. "
             "Verified updates and source-reported announcements are presented separately."
         ),
         body="\n\n".join(sections),
-        development_ids=[row["id"] for row in developments],
+        development_ids=[row["id"] for row in selected_developments],
     )
 
 

@@ -271,6 +271,50 @@ class LocalWorker:
             "results": results,
         }
 
+    async def run_balanced_batch(self, max_jobs: int = 20) -> dict[str, Any]:
+        candidates = await self.repository.balanced_pending_jobs(limit=max_jobs)
+        results: list[dict[str, Any]] = []
+        previous_failure: str | None = None
+        consecutive_failures = 0
+        for candidate in candidates:
+            category = candidate["public_category"]
+            claimed = await self.repository.claim_replay_job(self.worker_id, candidate["id"])
+            result = (
+                await self._run_claimed_diagnostic(claimed[0])
+                if len(claimed) == 1
+                else {"ok": False, "reason": "specific_job_claim_failed", "transitions": []}
+            )
+            transitions = result.get("transitions", [])
+            details = result.get("result", {})
+            failure = None if result.get("ok") else result.get("reason")
+            results.append(
+                {
+                    "public_category": category,
+                    "stage_a": any(row.get("state") == "factual_extraction_validated" for row in transitions),
+                    "stage_b": any(row.get("state") == "bounded_analysis_validated" for row in transitions),
+                    "repair_used": bool(details.get("stage_a_repair_used") or details.get("stage_b_repair_used")),
+                    "verification_status": details.get("verification_status"),
+                    "publication_status": details.get("publication_status"),
+                    "importance_label": details.get("importance_label"),
+                    "confirmed_claims": details.get("confirmed_claims", 0),
+                    "reported_claims": details.get("reported_claims", 0),
+                    "deterministic_reasons": details.get("deterministic_reasons", []),
+                    "stage_a_seconds": details.get("stage_a_seconds"),
+                    "stage_b_seconds": details.get("stage_b_seconds"),
+                    "total_seconds": details.get("total_seconds", result.get("duration_seconds")),
+                    "failure": failure,
+                }
+            )
+            if failure:
+                consecutive_failures = consecutive_failures + 1 if failure == previous_failure else 1
+                previous_failure = failure
+                if consecutive_failures >= 3:
+                    break
+            else:
+                previous_failure = None
+                consecutive_failures = 0
+        return {"selected": len(candidates), "processed": len(results), "results": results}
+
     async def _run_claimed_diagnostic(self, job: dict[str, Any]) -> dict[str, Any]:
         started = perf_counter()
         transitions: list[dict[str, Any]] = []

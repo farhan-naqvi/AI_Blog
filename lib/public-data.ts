@@ -66,13 +66,20 @@ export type DevelopmentFilters = {
   category?: PublicCategoryGroup;
 };
 
+export function developmentPublicCategory(item: Development): PublicCategoryGroup {
+  if (publicCategoryGroups.includes(item.public_category as PublicCategoryGroup)) {
+    return item.public_category as PublicCategoryGroup;
+  }
+  if (item.category === "Models") return "Models";
+  if (["Agents", "Developer tools"].includes(item.category)) return "Agents and developer tools";
+  if (["Research", "Robotics"].includes(item.category)) return "Research and AI science";
+  if (item.category === "Infrastructure") return "Infrastructure and hardware";
+  if (["Regulation", "Security"].includes(item.category)) return "Policy, safety and security";
+  return "Business and products";
+}
+
 function matchesCategory(item: Development, group: PublicCategoryGroup): boolean {
-  if (group === "Models") return item.category === "Models";
-  if (group === "Agents and developer tools") return ["Agents", "Developer tools"].includes(item.category);
-  if (group === "Research and AI science") return ["Research", "Robotics"].includes(item.category);
-  if (group === "Infrastructure and hardware") return item.category === "Infrastructure";
-  if (group === "Business and products") return ["Partnership", "Funding"].includes(item.event_type) || item.category === "Other";
-  return ["Regulation", "Security"].includes(item.category);
+  return developmentPublicCategory(item) === group;
 }
 
 export async function getDevelopments(
@@ -95,11 +102,12 @@ export async function getDevelopments(
     if (difference) return difference;
     return new Date(right.published_at ?? 0).getTime() - new Date(left.published_at ?? 0).getTime();
   });
-  const categoryCounts = new Map<string, number>();
+  const categoryCounts = new Map<PublicCategoryGroup, number>();
   const selected = rows.filter((row) => {
-    const count = categoryCounts.get(row.category) ?? 0;
+    const category = developmentPublicCategory(row);
+    const count = categoryCounts.get(category) ?? 0;
     if (count >= 5) return false;
-    categoryCounts.set(row.category, count + 1);
+    categoryCounts.set(category, count + 1);
     return true;
   }).slice(0, boundedLimit);
   if (!selected.length) return selected;

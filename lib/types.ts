@@ -12,6 +12,7 @@ export type Development = {
   product: string | null;
   event_type: string;
   category: string;
+  public_category?: string | null;
   importance_label: "Major" | "Notable" | "Incremental";
   confidence_label: "High" | "Medium" | "Low";
   verification_status: "Verified" | "Reported" | "Developing";

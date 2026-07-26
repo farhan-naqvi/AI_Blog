@@ -81,6 +81,18 @@ test("daily page distinguishes a monitoring digest from a briefing", async () =>
   assert.match(briefing, /zero public developments/);
 });
 
+test("overview renders six category sections without requiring five items", async () => {
+  const response = await render("/");
+  const html = await response.text();
+  for (const label of ["Models", "Agents and developer tools", "Research and AI science", "Infrastructure and hardware", "Business and products", "Policy, safety and security"]) {
+    assert.match(html, new RegExp(label, "i"));
+  }
+  assert.match(html, /View all/i);
+  const publicData = await readFile(new URL("../lib/public-data.ts", import.meta.url), "utf8");
+  assert.match(publicData, /count >= 5/);
+  assert.doesNotMatch(publicData, /count === 5/);
+});
+
 test("server-renders the owner sign-in without private data", async () => {
   const response = await render("/owner-login");
   assert.equal(response.status, 200);

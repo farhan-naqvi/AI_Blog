@@ -5,11 +5,20 @@ from pydantic import BaseModel
 from .collection import CollectionService
 from .collectors import ArxivCollector, GitHubCollector, HuggingFaceCollector, RssCollector
 from .config import Settings
+from .coverage import PUBLIC_CATEGORIES, source_category
 from .llm import ModelUnavailableError, OllamaProvider, StructuredGenerationError
 from .repository import SupabaseRepository
 
 SMOKE_CONNECTORS = ("rss", "github", "arxiv", "huggingface")
 SMOKE_MAX_ITEMS = 3
+COVERAGE_SOURCE_LIMITS = {
+    "Models": 3,
+    "Agents and developer tools": 3,
+    "Research and AI science": 3,
+    "Infrastructure and hardware": 2,
+    "Business and products": 2,
+    "Policy, safety and security": 2,
+}
 
 
 class OllamaDiagnosticOutput(BaseModel):
@@ -37,6 +46,7 @@ async def smoke_test_collectors(
         "errors": 0,
         "items_filtered": 0,
         "duplicates": 0,
+        "items_clustered": 0,
     }
     for key in SMOKE_CONNECTORS:
         source = await repository.smoke_source(key)
@@ -99,3 +109,58 @@ async def check_ollama(base_url: str, model: str) -> dict[str, Any]:
             }
     finally:
         await provider.close()
+
+
+async def coverage_audit(repository: SupabaseRepository) -> dict[str, Any]:
+    sources = await repository.coverage_sources(active_only=False)
+    configured = {category: 0 for category in PUBLIC_CATEGORIES}
+    active = {category: 0 for category in PUBLIC_CATEGORIES}
+    connectors: set[str] = set()
+    for source in sources:
+        category = source_category(source)
+        configured[category] += 1
+        if source.active:
+            active[category] += 1
+            connectors.add(source.connector_key)
+    return {
+        "configured_total": len(sources),
+        "active_total": sum(active.values()),
+        "configured_by_category": configured,
+        "active_by_category": active,
+        "implemented_connector_types": sorted(connectors),
+        "insufficient_categories": [category for category, count in active.items() if count < 5],
+    }
+
+
+async def bounded_category_collection(
+    repository: SupabaseRepository, settings: Settings
+) -> dict[str, Any]:
+    sources = await repository.coverage_sources(active_only=True)
+    selected: list = []
+    counts = {category: 0 for category in PUBLIC_CATEGORIES}
+    for source in sources:
+        category = source_category(source)
+        if counts[category] < COVERAGE_SOURCE_LIMITS[category]:
+            selected.append(source)
+            counts[category] += 1
+    github_token = settings.github_token.get_secret_value() if settings.github_token else None
+    hf_token = settings.huggingface_token.get_secret_value() if settings.huggingface_token else None
+    service = CollectionService(
+        repository,
+        {
+            "rss": RssCollector(max_items=10),
+            "github": GitHubCollector(github_token, max_items=10),
+            "arxiv": ArxivCollector(max_items=10),
+            "huggingface": HuggingFaceCollector(hf_token, max_items=10),
+        },
+        concurrency=1,
+    )
+    result = await service.run_sources(selected)
+    return {
+        "mode": "bounded-category",
+        "max_sources_per_category": 3,
+        "max_items_per_source": 10,
+        "max_raw_entries": 150,
+        "selected_sources_by_category": counts,
+        **result,
+    }

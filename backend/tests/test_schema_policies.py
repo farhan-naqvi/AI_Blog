@@ -25,6 +25,12 @@ REPORTED_VISIBILITY_MIGRATION = (
     / "migrations"
     / "202607260003_reported_visibility.sql"
 ).read_text(encoding="utf-8")
+COVERAGE_MIGRATION = (
+    Path(__file__).parents[2]
+    / "supabase"
+    / "migrations"
+    / "202607260004_category_coverage.sql"
+).read_text(encoding="utf-8")
 
 
 def test_atomic_job_claim_uses_skip_locked() -> None:
@@ -122,6 +128,15 @@ def test_public_source_rpc_exposes_only_reviewed_projection() -> None:
     ):
         assert forbidden not in body
     assert "grant execute on function public.get_public_sources() to anon" in lowered
+
+
+def test_category_coverage_migration_preserves_private_table_denials() -> None:
+    lowered = COVERAGE_MIGRATION.lower()
+    assert "grant execute on function public.get_public_sources() to anon" in lowered
+    assert "grant execute on function public.ingest_source_item(jsonb) to service_role" in lowered
+    assert "grant execute on function public.ingest_source_item(jsonb) to anon" not in lowered
+    for table in ("processing_jobs", "exceptions", "private_settings", "linkedin_drafts"):
+        assert f"grant select on public.{table} to anon" not in lowered
 
 
 def test_release_metadata_is_bounded_and_ingested_without_article_text() -> None:
