@@ -32,3 +32,25 @@ def test_http_client_request_logging_is_suppressed() -> None:
     configure_logging("INFO")
     assert logging.getLogger("httpx").level == logging.WARNING
     assert logging.getLogger("httpcore").level == logging.WARNING
+
+
+def test_worker_timing_log_keeps_only_safe_duration_fields() -> None:
+    record = logging.LogRecord("test", logging.INFO, "", 0, "job_completed", (), None)
+    record.subsystem = "worker"
+    record.fetch_duration_ms = 120
+    record.extraction_duration_ms = 8
+    record.stage_a_duration_ms = 1000
+    record.stage_b_duration_ms = 800
+    record.total_duration_ms = 1950
+    record.url = "https://example.test/private"
+    record.prompt = "private prompt"
+    record.model_response = "private response"
+    payload = json.loads(JsonFormatter().format(record))
+    assert payload["fetch_duration_ms"] == 120
+    assert payload["extraction_duration_ms"] == 8
+    assert payload["stage_a_duration_ms"] == 1000
+    assert payload["stage_b_duration_ms"] == 800
+    assert payload["total_duration_ms"] == 1950
+    assert "url" not in payload
+    assert "prompt" not in payload
+    assert "model_response" not in payload

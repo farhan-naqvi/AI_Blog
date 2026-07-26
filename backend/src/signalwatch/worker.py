@@ -65,6 +65,7 @@ class LocalWorker:
         client: httpx.AsyncClient,
         transitions: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
+        job_started = perf_counter()
         source_items = await self.repository.source_items_for_job(job)
         if not source_items:
             raise ValueError("job source item does not exist")
@@ -74,6 +75,8 @@ class LocalWorker:
         readable_text = ""
         try:
             readable_text = await fetch_readable_text(client, item["canonical_url"] or item["url"])
+            fetch_seconds = float(getattr(readable_text, "fetch_seconds", 0.0))
+            extraction_seconds = float(getattr(readable_text, "extraction_seconds", 0.0))
             if transitions is not None:
                 transitions.append({"state": "source_fetched_and_extracted_locally", "created": False})
             extracted, timings = await self._extract(source_items, readable_text, transitions)
@@ -107,14 +110,30 @@ class LocalWorker:
                     "linkedin_draft_failed_after_job_completion",
                     extra={"subsystem": "worker", "category": "draft"},
                 )
-        logger.info("job_completed", extra={"subsystem": "worker", "category": "success"})
+        total_seconds = perf_counter() - job_started
+        logger.info(
+            "job_completed",
+            extra={
+                "subsystem": "worker",
+                "category": "success",
+                "fetch_duration_ms": round(fetch_seconds * 1000),
+                "extraction_duration_ms": round(extraction_seconds * 1000),
+                "stage_a_duration_ms": round(timings["stage_a_seconds"] * 1000),
+                "stage_b_duration_ms": round(timings["stage_b_seconds"] * 1000),
+                "total_duration_ms": round(total_seconds * 1000),
+            },
+        )
         return {
             "verification_status": decision.verification_status,
+            "importance_label": extracted.importance_label,
             "publication_status": decision.publication_status,
             "deterministic_reasons": decision.reasons,
             "confirmed_claims": len(extracted.confirmed_claims),
             "reported_claims": len(extracted.reported_claims),
             "linkedin_draft_created": draft_created,
+            "fetch_seconds": round(fetch_seconds, 2),
+            "extraction_seconds": round(extraction_seconds, 2),
+            "total_seconds": round(total_seconds, 2),
             **timings,
         }
 
@@ -221,11 +240,16 @@ class LocalWorker:
                 ),
                 "job_state": "Completed" if result.get("ok") else "Pending",
                 "development_state": details.get("verification_status"),
+                "importance_label": details.get("importance_label"),
                 "publication_state": details.get("publication_status"),
                 "deterministic_reasons": details.get("deterministic_reasons", []),
                 "confirmed_claims": details.get("confirmed_claims", 0),
                 "reported_claims": details.get("reported_claims", 0),
-                "duration_seconds": result.get("duration_seconds"),
+                "fetch_seconds": details.get("fetch_seconds"),
+                "extraction_seconds": details.get("extraction_seconds"),
+                "stage_a_seconds": details.get("stage_a_seconds"),
+                "stage_b_seconds": details.get("stage_b_seconds"),
+                "duration_seconds": details.get("total_seconds", result.get("duration_seconds")),
                 "failure": None if result.get("ok") else result.get("reason"),
             }
             results.append(safe_result)

@@ -1,5 +1,6 @@
 import ipaddress
 import socket
+from time import perf_counter
 from urllib import robotparser
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -10,6 +11,21 @@ import trafilatura
 
 MAX_SOURCE_BYTES = 5 * 1024 * 1024
 ALLOWED_CONTENT_TYPES = ("text/html", "text/plain", "application/xhtml+xml")
+
+
+class ReadableText(str):
+    """Extracted text carrying non-sensitive local performance timings."""
+
+    fetch_seconds: float
+    extraction_seconds: float
+
+    def __new__(
+        cls, value: str, *, fetch_seconds: float, extraction_seconds: float
+    ) -> "ReadableText":
+        instance = super().__new__(cls, value)
+        instance.fetch_seconds = fetch_seconds
+        instance.extraction_seconds = extraction_seconds
+        return instance
 
 
 def validate_public_url(url: str) -> str:
@@ -57,7 +73,8 @@ async def safe_stream(
         await response.aclose()
 
 
-async def fetch_readable_text(client: httpx.AsyncClient, url: str) -> str:
+async def fetch_readable_text(client: httpx.AsyncClient, url: str) -> ReadableText:
+    fetch_started = perf_counter()
     if not await robots_allows(client, url):
         raise ValueError("source robots policy does not allow automated retrieval")
     async with safe_stream(client, url) as response:
@@ -73,11 +90,17 @@ async def fetch_readable_text(client: httpx.AsyncClient, url: str) -> str:
                 raise ValueError("source response exceeds maximum size")
             chunks.append(chunk)
     raw = b"".join(chunks).decode(response.encoding or "utf-8", errors="replace")
+    fetch_seconds = perf_counter() - fetch_started
+    extraction_started = perf_counter()
     extracted = trafilatura.extract(
         raw, include_comments=False, include_tables=False, favor_precision=True
     )
     text = (extracted or raw).strip()
-    return text[:40_000]
+    return ReadableText(
+        text[:40_000],
+        fetch_seconds=fetch_seconds,
+        extraction_seconds=perf_counter() - extraction_started,
+    )
 
 
 async def robots_allows(client: httpx.AsyncClient, url: str) -> bool:
